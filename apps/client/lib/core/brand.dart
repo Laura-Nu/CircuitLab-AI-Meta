@@ -1,22 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-Uri landingUri(String language) {
-  const origin = String.fromEnvironment(
-    'SITE_ORIGIN',
-    defaultValue: 'https://circuitlab.doc-ia.cloud',
-  );
-  final base = Uri.base.scheme.startsWith('http')
-      ? Uri.base
-      : Uri.parse(origin);
-  return base.resolve(language == 'en' ? '/en/' : '/');
-}
-
-Future<bool> openPublicUrl(Uri url) => launchUrl(
-  url,
-  mode: LaunchMode.externalApplication,
-  webOnlyWindowName: '_self',
-);
+import 'public_navigation.dart';
+import 'site_location.dart';
+export 'public_navigation.dart' show openPublicUrl;
+export 'site_location.dart' show landingUri;
 
 class CircuitBrand extends StatelessWidget {
   final String language;
