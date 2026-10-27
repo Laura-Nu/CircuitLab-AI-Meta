@@ -1,0 +1,10 @@
+# CircuitLab only: temporary HTTP site for a webroot certificate challenge.
+server {
+    listen 80;
+    server_name @@DOMAIN@@;
+    location ^~ /.well-known/acme-challenge/ {
+        root @@ROOT@@/.acme;
+        try_files $uri =404;
+    }
+    location / { return 404; }
+}

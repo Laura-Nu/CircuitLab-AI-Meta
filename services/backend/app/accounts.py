@@ -2,8 +2,6 @@
 
 import logging
 import secrets
-import smtplib
-import ssl
 import time
 from email.message import EmailMessage
 from pathlib import Path
@@ -47,11 +45,6 @@ def recovery_available():
             config.recovery_delivery == "resend"
             and bool(config.resend_api_key.get_secret_value().strip() and config.resend_from.strip())
         )
-        or (
-            config.recovery_delivery == "smtp"
-            and bool(config.smtp_host and config.smtp_from)
-            and config.smtp_security in {"starttls", "tls"}
-        )
     )
 
 
@@ -65,9 +58,7 @@ def deliver_recovery(email, raw, language):
     message["Subject"] = (
         "Reset your CircuitLab password" if english else "Restablece tu contraseña de CircuitLab"
     )
-    message["From"] = (
-        config.resend_from if config.recovery_delivery == "resend" else config.smtp_from
-    ) or "circuitlab@localhost"
+    message["From"] = config.resend_from.strip() or "circuitlab@localhost"
     message["To"] = email
     message.set_content(
         (
@@ -117,16 +108,6 @@ def deliver_recovery(email, raw, language):
                 or not receipt["id"].strip()
             ):
                 raise ValueError("Invalid email delivery response")
-        elif config.recovery_delivery == "smtp" and recovery_available():
-            context = ssl.create_default_context()
-            smtp_class = smtplib.SMTP_SSL if config.smtp_security == "tls" else smtplib.SMTP
-            options = {"context": context} if config.smtp_security == "tls" else {}
-            with smtp_class(config.smtp_host, config.smtp_port, timeout=10, **options) as smtp:
-                if config.smtp_security == "starttls":
-                    smtp.starttls(context=context)
-                if config.smtp_username:
-                    smtp.login(config.smtp_username, config.smtp_password)
-                smtp.send_message(message)
     except Exception as exc:
         if isinstance(exc, httpx.HTTPStatusError):
             log.error(

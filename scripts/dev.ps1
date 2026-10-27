@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('file', 'resend', 'smtp', 'disabled')]
+    [ValidateSet('file', 'resend', 'disabled')]
     [string]$RecoveryDelivery = 'file',
     [ValidateSet('disabled', 'meta', 'simulation')]
     [string]$StoryMode = 'simulation'

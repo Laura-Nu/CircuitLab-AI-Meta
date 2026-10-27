@@ -14,6 +14,7 @@ import '../l10n/app_strings.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
+import 'metrics.dart';
 
 class Workbench extends ConsumerStatefulWidget {
   final String? sessionId;
@@ -264,7 +265,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                     padding: EdgeInsets.all(wide ? 36 : 20),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: 1350),
-                      child: section == 'users' && api.isAdmin
+                      child: section == 'metrics' && api.isAdmin
+                          ? MetricsPanel(api: api)
+                          : section == 'users' && api.isAdmin
                           ? AccountsPanel(api: api)
                           : section == 'devices'
                           ? devicePage()
@@ -300,8 +303,10 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             SizedBox(height: 14),
             nav(Icons.grid_view_rounded, tr('mySessions'), 'sessions'),
             nav(Icons.usb_rounded, tr('devices'), 'devices'),
-            if (api.isAdmin)
+            if (api.isAdmin) ...[
+              nav(Icons.insights_outlined, tr('metricsNav'), 'metrics'),
               nav(Icons.manage_accounts_outlined, tr('users'), 'users'),
+            ],
             SizedBox(height: 28),
             Divider(),
             SizedBox(height: 20),

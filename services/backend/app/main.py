@@ -52,6 +52,7 @@ from app.storage import LocalStorage
 from app.i18n import request_language, error_message
 from app.reports import prepare_report, render_markdown
 from app.accounts import router as accounts_router, public_user
+from app.metrics import router as metrics_router
 from app import stories
 from app.inference import image_limit
 
@@ -66,6 +67,7 @@ async def lifespan(app):
 
 app = FastAPI(title="CircuitLab AI", version="0.1.0", lifespan=lifespan)
 app.include_router(accounts_router)
+app.include_router(metrics_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings().app_origin],

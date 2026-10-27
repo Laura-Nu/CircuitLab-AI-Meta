@@ -24,7 +24,7 @@ from app import stories
 log = logging.getLogger("circuitlab.worker")
 
 
-def claim():
+def claim(job_id=None):
     now = time.time()
     with SessionLocal() as db:
         job = db.scalar(
@@ -33,7 +33,8 @@ def claim():
                 or_(
                     and_(Job.status == "pending", Job.lease_until <= now),
                     and_(Job.status == "running", Job.lease_until < now),
-                )
+                ),
+                *([Job.id == job_id] if job_id else []),
             )
             .order_by(Job.created_at)
             .with_for_update(skip_locked=True)
@@ -158,7 +159,15 @@ def process(job_id, lease_token):
                 raise ValueError("Missing story snapshot")
             story_output = stories.generate(story_input)
         if kind == "analysis" and not exhausted:
-            output, metadata = analyze(context)
+            def persist_exchange(audit):
+                with SessionLocal() as audit_db:
+                    audit_db.add(ModelRun(session_id=context["session_id"], data={**audit, "job_id": job_id}))
+                    audit_db.commit()
+
+            if context["diagnosis_mode"] == "meta":
+                output, metadata = analyze(context, on_exchange=persist_exchange)
+            else:
+                output, metadata = analyze(context)
             validate_plan(output, context)
         with SessionLocal() as db:
             job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
@@ -245,7 +254,9 @@ def process(job_id, lease_token):
                 )
             )
             job.error = code
-            if job.attempts < 3:
+            status = getattr(exc, "audit", {}).get("http_status", 0)
+            permanent_failure = 400 <= status < 500 and status not in {408, 429}
+            if job.attempts < 3 and not permanent_failure:
                 job.status = "pending"
                 job.lease_until = time.time() + 2**job.attempts
             else:

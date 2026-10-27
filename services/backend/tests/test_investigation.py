@@ -28,6 +28,11 @@ def test_baseten_profile_has_bounded_images_and_preserves_real_provider_receipts
         calls.append(kwargs)
         assert url == inference.BASETEN_URL + "/chat/completions"
         assert "response_format" not in kwargs["json"]
+        if kwargs["json"]["tools"][0]["function"]["name"] == "get_recorded_observations":
+            return httpx.Response(200, request=httpx.Request("POST", url), json={
+                "choices": [{"message": {"tool_calls": [{"id": "read-1", "type": "function",
+                    "function": {"name": "get_recorded_observations", "arguments": "{}"}}]}}],
+            })
         return httpx.Response(200, request=httpx.Request("POST", url), headers={"x-request-id": "receipt-123"},
                               json={"id": "response-123", "model": "meta-models/muse-spark-open-1026",
                                     "choices": [{"message": {"tool_calls": [{"function": {
@@ -42,7 +47,7 @@ def test_baseten_profile_has_bounded_images_and_preserves_real_provider_receipts
     assert len(audit["request_sha256"]) == 64 and "private-baseten-key" not in json.dumps(audit)
     with pytest.raises(ValueError, match="image limit"):
         meta.analyze({"evidence": [{}] * 9})
-    assert len(calls) == 1 and calls[0]["timeout"] == config.meta_timeout_seconds
+    assert len(calls) == 2 and calls[0]["timeout"] == config.meta_timeout_seconds
 
 
 @pytest.mark.parametrize("endpoint", ["http://remote.test/v1", "https://key:secret@host.test/v1",

@@ -159,4 +159,6 @@ def agent_trace(db, session_id):
                "inference_endpoint", "prompt_version", "duration_ms", "usage", "open_weight_candidate",
                "weights_independently_verified", "output", "error", "status"}
     return [{"id": row.id, "created_at": row.created_at,
-             **{key: value for key, value in row.data.items() if key in allowed}} for row in runs]
+             **{key: value for key, value in row.data.items() if key in allowed}} for row in runs
+            if row.data.get("run_kind") not in {"provider_exchange", "tool_execution"}
+            and not row.data.get("verification")]

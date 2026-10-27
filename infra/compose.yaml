@@ -1,6 +1,6 @@
-name: circuitlab
+name: ${CIRCUITLAB_PROJECT_NAME:-circuitlab-meta}
 x-backend: &backend
-  image: circuitlab-backend:0.1.0
+  image: ${CIRCUITLAB_IMAGE:-circuitlab-meta-backend:0.1.0}
   build:
     context: ..
     dockerfile: infra/docker/backend.Dockerfile
@@ -38,7 +38,7 @@ services:
   api:
     <<: *backend
     ports:
-      - '127.0.0.1:8000:8000'
+      - '127.0.0.1:${API_BIND_PORT:-8000}:8000'
     depends_on:
       migrate:
         condition: service_completed_successfully

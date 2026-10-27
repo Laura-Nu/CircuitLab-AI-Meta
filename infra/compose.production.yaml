@@ -1,0 +1,20 @@
+# Merge with compose.yaml. PostgreSQL has no published host port.
+x-production: &production
+  environment:
+    APP_ENV: production
+    AI_MODE: meta
+    STORYBOARD_MODE: disabled
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+services:
+  migrate:
+    <<: *production
+  api:
+    <<: *production
+    # Only Nginx on this host can reach the loopback-published API port.
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, '8000', --proxy-headers, --forwarded-allow-ips, '*']
+  worker:
+    <<: *production

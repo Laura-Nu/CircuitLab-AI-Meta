@@ -3,9 +3,9 @@ import asyncio
 import json
 import os
 import sqlite3
-import time
 from pathlib import Path
-import serial
+from bridge.adapters import adapter_for
+from bridge.adapters.base import failed
 from websockets.asyncio.client import connect
 
 
@@ -28,52 +28,8 @@ class Journal:
         self.db.commit()
 
 
-def failed(command, calibration, simulated, status="timeout"):
-    return {"protocol_version": "1", "command_id": command["command_id"], "status": status,
-        "point_id": command["point_id"], "value": None, "unit": "V", "sample_count": 0,
-        "source": "simulated" if simulated else "instrumented", "calibration_id": calibration,
-        "measured_at": time.time()}
-
-
 def acquire(command, config):
-    simulated = bool(config.get("simulate", False))
-    calibration = config["calibration_id"]
-    allowed = (command.get("protocol_version") == "1" and command.get("action") == "read_voltage"
-        and command.get("device_id") == config["device_id"]
-        and command.get("point_id") in config["points"]
-        and 1 <= command.get("sample_count", 0) <= 100
-        and 100 <= command.get("deadline_ms", 0) <= 10000)
-    if not allowed:
-        return failed(command, calibration, simulated, "precondition_failed")
-    if simulated:
-        return {**failed(command, calibration, True), "status": "ok", "sample_count": command["sample_count"],
-                "value": float(config.get("simulated_values", {}).get(command["point_id"], 2.5))}
-    try:
-        # Never upload or execute user firmware. This speaks only the fixed instrument protocol.
-        with serial.Serial(config["serial_port"], config.get("baudrate", 115200), timeout=0.2) as port:
-            time.sleep(2)  # UNO resets when opening the port; configured deadline includes this.
-            port.reset_input_buffer()
-            port.write((json.dumps(command) + "\n").encode())
-            deadline = time.monotonic() + command["deadline_ms"] / 1000
-            while time.monotonic() < deadline:
-                line = port.readline()
-                if not line:
-                    continue
-                result = json.loads(line)
-                if result.get("command_id") != command["command_id"]:
-                    continue
-                if result.get("status") != "ok":
-                    return failed(command, calibration, False, result.get("status", "out_of_range"))
-                value = float(result["value"])
-                if not 0 <= value <= 5:
-                    return failed(command, calibration, False, "out_of_range")
-                return {**failed(command, calibration, False), "status": "ok", "value": value,
-                        "sample_count": result["sample_count"]}
-    except (serial.SerialException, OSError):
-        return failed(command, calibration, False, "disconnected")
-    except (ValueError, KeyError):
-        return failed(command, calibration, False, "out_of_range")
-    return failed(command, calibration, False)
+    return adapter_for(config).read(command)
 
 
 async def run(config):

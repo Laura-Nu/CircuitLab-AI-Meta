@@ -4,9 +4,10 @@ from email import policy
 from email.parser import BytesParser
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
 
-from app.config import settings
+from app.config import Settings, settings
 from app.db import AccountEvent, Device, Token, User
 from app.security import digest
 
@@ -213,45 +214,7 @@ def test_development_mail_delivery_is_disabled_in_production(client, mailbox, mo
     assert not mailbox.exists()
 
 
-def test_smtp_uses_tls_and_delivery_failure_does_not_disclose_account(client, monkeypatch, caplog):
-    from app import accounts
-
-    operations = []
-
-    class SMTP:
-        def __init__(self, host, port, **kwargs):
-            operations.append((host, port, kwargs["timeout"]))
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-        def starttls(self, context):
-            operations.append("tls")
-
-        def login(self, username, password):
-            operations.append("login")
-
-        def send_message(self, message):
-            operations.append(message.get_content())
-            raise OSError("secret-address-and-link-must-not-be-logged")
-
-    monkeypatch.setattr(accounts.smtplib, "SMTP", SMTP)
-    for key, value in {
-        "recovery_delivery": "smtp",
-        "smtp_host": "mail.example.test",
-        "smtp_from": "lab@example.test",
-        "smtp_username": "service",
-        "smtp_password": "secret",
-    }.items():
-        monkeypatch.setattr(settings(), key, value)
-    response = client.post(
-        P + "/auth/forgot-password", json={"email": "owner@example.test"}, headers={"Accept-Language": "en"}
-    )
-    assert response.status_code == 202 and response.json() == {"status": "accepted"}
-    assert operations[0] == ("mail.example.test", 587, 10)
-    assert operations[1:3] == ["tls", "login"]
-    assert "?lang=en#/reset-password?token=" in operations[-1]
-    assert "OSError" in caplog.text and "secret-address" not in caplog.text
+def test_unsupported_recovery_delivery_is_rejected():
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, recovery_delivery="smtp")
+    assert any(item["loc"] == ("recovery_delivery",) for item in error.value.errors())
