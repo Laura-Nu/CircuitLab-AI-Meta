@@ -28,10 +28,10 @@ The local preview runs in explicitly labeled simulation mode.
 5. Confirm the measurement conditions and record a manual reading or request an instrument reading.
 6. Review the proposed intervention, disconnect power for wiring changes and confirm the action performed.
 7. Restore the operating conditions and collect fresh readings for every specified point.
-8. Run deterministic verification and review the resulting report and event history.
+8. Perform the stated functional test, record its observed pass/fail result, then run verification and review the report and event history.
 
 The model proposes diagnostic steps. The backend enforces state transitions and
-computes the final voltage-range check independently from the model's explanation.
+checks fresh voltage readings and the separately recorded functional observation independently from the model's explanation. A failed or missing functional observation cannot produce a verified repair.
 
 ## Technologies and architecture
 
@@ -290,8 +290,7 @@ shows current pending/running jobs regardless of their creation date.
 
 HTTP success and schema acceptance are operational metrics, not diagnostic accuracy.
 Accuracy remains unavailable until independently reviewed labeled cases are linked.
-Real inference can consume simulated instrument readings; their source labels are
-preserved and are shown separately from physical verification.
+Development investigations can combine real inference with explicitly simulated readings. Production blocks simulated devices at enrollment, connection, command creation and result acceptance, including legacy registrations. Historical simulation records retain their labels.
 
 ## Live provider verification
 
@@ -364,8 +363,8 @@ Serve `build/site/` through Nginx using `infra/nginx/circuitlab.conf.example` as
 reference. The API binds to loopback; private evidence is shared with the worker.
 Back up PostgreSQL and its corresponding evidence files together.
 
-The numerical verifier checks post-intervention voltage ranges. Temporal stability,
-LED brightness, resistance, continuity, arbitrary circuits and multiple simultaneous
+The numerical verifier checks post-intervention voltage ranges and requires a separate operator-recorded functional test against the frozen description. The instrument does not automatically measure temporal stability,
+LED brightness, resistance, continuity, arbitrary circuits or multiple simultaneous
 faults are outside the current scope. Simulation has been exercised locally; the
 live verifier checks configured model inference separately. Real Resend delivery, calibrated hardware, physical-device behavior
 and production deployment still require validation in their configured environments.
@@ -546,3 +545,151 @@ separately. No remote server changes are made by configuration preparation.
 
 DNS/TLS, SSH destination, VPS Docker availability, credentials and
 production connectivity still require validation on the actual server.
+
+
+## Production acceptance and operations
+
+Migration `0006` adds atomic daily inference budgets, worker heartbeats and private
+email delivery receipts. It preserves existing accounts and investigations. Existing
+`verifying` investigations must record a fresh functional check before completion.
+Legacy completed reports are retained with their original criteria; they are not
+retroactively upgraded to the new functional-check guarantee.
+
+### Functional verification without the instrument bridge
+
+Use actual multimeter readings through the manual measurement form. After recording
+the performed intervention, collect new readings at every specified point and open
+**Record functional test**. Perform the behavior in the frozen functional description,
+choose pass or fail, describe the observation and confirm it occurred after the
+intervention. The backend records the operator, time, criterion and event identifier.
+A passing voltage check with a missing or failed functional check cannot resolve the
+investigation. The report retains `verification_basis: manual`, `instrumented` or
+`mixed`; human confirmation is not an automatic optical or stability measurement.
+
+### Budgets and service health
+
+`DAILY_AI_JOBS_PER_USER=20` and `DAILY_AI_JOBS_GLOBAL=200` default to daily worker
+attempt limits, resetting at 00:00 UTC. Each retry reserves a new attempt atomically;
+one attempt permits at most two provider requests. The explicit production probe
+reserves two attempts for its three requests. These are attempt limits, not exact
+currency or token billing. Configure the limits privately to fit the available budget.
+`MAX_STORAGE_MB_PER_USER=250` bounds the total normalized evidence stored across that
+user's investigations. Provider credentials remain backend-only.
+
+The worker records its heartbeat in PostgreSQL. Its container has its own health
+check, and production `/api/v1/health/ready` returns 503 if no worker heartbeat is
+fresh. The allowed interval is `WORKER_LEASE_SECONDS + 30`, accommodating a bounded
+inference request. Administrator metrics show worker availability, queue age, expired
+leases, daily budgets and email outcomes. Configure an external uptime monitor for
+the HTTPS readiness URL if notifications are required; the optional systemd monitor
+reports failures to the journal and does not send notifications by itself.
+
+### Validate the VPS without physical hardware
+
+After deploying the updated image and migration, run from `/var/www/circuitlab`:
+
+```bash
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml ps
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml exec -T api python -m app.production_check
+```
+
+This checks configuration, migration, PostgreSQL and worker presence. It does not
+approve inference merely because a key/model is configured. Create an investigation
+in the application, confirm its specification and upload a circuit photograph. The
+following explicit check consumes model tokens and records real provider receipts
+and its probe event in that existing investigation:
+
+```bash
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml exec -T api python -m app.production_check --session-id YOUR_SESSION_ID --probe-meta
+```
+
+It makes a real text request and the normal image-bearing diagnostic agent cycle,
+executes the allowlisted observation function, returns its result to the model and
+validates the final schema. It never creates fixture measurements or changes the
+diagnosis state. A failed provider call remains a failed verification with its audit
+retained. `physical_measurement_performed` always remains false for this command.
+
+For the actual worker workflow, use the application to request analysis, record
+real manual multimeter readings, review the updated diagnosis, record the intervention
+and functional observation, and request verification. `--session-id YOUR_SESSION_ID`
+without `--probe-meta` inspects that investigation's persisted workflow without making
+provider requests. This separates backend connectivity probes from queue processing
+and from physical repair validation.
+
+### Resend delivery verification
+
+Request password recovery for an account you control through the application. The
+API response remains generic to prevent account discovery. The administrator can
+open email receipts and **Check Resend status**; this retrieves the existing email's
+status without sending another message. A send receipt is recorded as `accepted`,
+not `delivered`. The read API follows the official [Resend retrieval contract](https://resend.com/docs/api-reference/emails/retrieve-email).
+Receipts store provider ID, outcome and HTTP status, never the reset token, link,
+recipient or provider response body. A provider `delivered` event establishes delivery
+to the receiving mail server; verify the inbox and complete a single-use password
+reset to finish the end-to-end acceptance check.
+
+```bash
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml exec -T api python -m app.production_check --email-receipt RECEIPT_ID
+```
+
+To send one explicitly requested test message without a reset link, use the
+interactive command below. The recipient is prompted privately and is not stored
+in the receipt or command arguments. Run it only with the recipient's authorization;
+it is never called by monitoring, unit tests or deployment:
+
+```bash
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml exec api python -m app.email_probe --send
+```
+
+Retrieval requires a Resend key with permission to read sent emails; a send-only key
+can send recovery emails but cannot retrieve receipts. Background dispatch does not
+persist plaintext reset links. If the API stops before dispatch is confirmed, the
+receipt remains pending and becomes a stale-dispatch warning; request a new recovery
+link rather than assuming delivery. No automatic resend with a fabricated token occurs.
+
+### Database and evidence snapshots
+
+The deployment's pre-migration database dump is supplemented by complete snapshots:
+
+```bash
+python3 scripts/backup_vps.py
+python3 scripts/backup_vps.py --check-files .tools/backups/snapshot-YOUR_SNAPSHOT
+python3 scripts/backup_vps.py --verify-restoration .tools/backups/snapshot-YOUR_SNAPSHOT
+```
+
+Snapshots contain a custom-format PostgreSQL dump, the immutable evidence archive
+and a checksum manifest, under private `.tools/backups/` directories. They contain
+private account/investigation data and must never enter Git or the public web root.
+Database references are captured before copying immutable evidence; concurrent new
+uploads may add unused files but cannot remove the referenced images.
+
+The restoration rehearsal creates only its own temporary PostgreSQL container,
+with no network, no published ports and bounded CPU/memory. It restores the database,
+checks every referenced image against its database hash, then removes only that
+container and its anonymous data volume. It never restores into the running database
+or deletes application volumes. Hash checks alone do not count as a tested restore.
+
+For an external copy, pre-create a private directory on a separate SSH destination,
+configure authentication outside this repository and set `BACKUP_SSH_TARGET` in the
+private `.env` to `backupuser@backup-host:/private/circuitlab-backups`, or pass
+`--remote`. The transfer uses SSH in batch mode; backups remain private data at rest,
+so use an encrypted destination. An empty target explicitly reports
+`offsite_copied: false`. Local snapshots alone do not protect against loss of the VPS.
+Snapshots are retained; configure a reviewed retention policy and disk monitoring
+for the chosen backup storage.
+
+Optional daily backup and five-minute monitoring timers are provided. Review their
+working directories if this project uses a path other than `/var/www/circuitlab`:
+
+```bash
+sudo install -m 644 infra/systemd/circuitlab-backup.service infra/systemd/circuitlab-backup.timer infra/systemd/circuitlab-monitor.service infra/systemd/circuitlab-monitor.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now circuitlab-backup.timer circuitlab-monitor.timer
+sudo systemctl start circuitlab-backup.service
+sudo systemctl status circuitlab-backup.service circuitlab-monitor.service --no-pager
+```
+
+These commands install only the named CircuitLab units. They do not restart Nginx,
+Docker, PM2 or other applications. Actual off-site destination access, real inbox
+receipt, current VPS provider inference and physical acquisition remain acceptance
+checks to perform in their configured environments; unit-test fixtures never certify them.

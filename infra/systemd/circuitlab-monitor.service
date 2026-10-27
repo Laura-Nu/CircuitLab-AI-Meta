@@ -1,0 +1,9 @@
+[Unit]
+Description=Check CircuitLab production readiness
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/circuitlab
+ExecStart=/usr/bin/docker compose --env-file .env -f infra/compose.yaml -f infra/compose.production.yaml exec -T api python -m app.production_check

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     session_idle_minutes: int = Field(default=240, ge=240, le=1440)
     max_upload_mb: int = 10
     max_analysis_steps: int = 8
+    daily_ai_jobs_per_user: int = Field(default=20, ge=1, le=10000)
+    daily_ai_jobs_global: int = Field(default=200, ge=1, le=100000)
+    max_storage_mb_per_user: int = Field(default=250, ge=10, le=100000)
     worker_lease_seconds: int = 120
     hardware_command_timeout_seconds: int = 10
     recovery_delivery: Literal["disabled", "file", "resend"] = "disabled"

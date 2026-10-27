@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.config import settings
 from app.db import Job, Measurement, ModelRun, Session, Verification, get_db
 from app.security import administrator
+from app.operations import operational_status
 
 router = APIRouter(prefix="/api/v1/admin", tags=["administration"])
 
@@ -143,11 +144,13 @@ def operational_metrics(db, days, mode, now=None):
                             .group_by(Job.status)).all())
     physical = db.scalar(select(func.count(Verification.id)).join(Session, Session.id == Verification.session_id)
                          .where(Verification.created_at >= start_ts, Verification.created_at <= end_ts,
-                                Verification.data["physical_verification"].as_boolean().is_(True), *mode_filter(mode)))
+                                Verification.data["physical_verification"].as_boolean().is_(True),
+                                Verification.data["functional_check"]["passed"].as_boolean().is_(True), *mode_filter(mode)))
     config = settings()
     return {
         "window": {"days": days, "start": start_ts, "end": end_ts, "timezone": "UTC", "mode": mode},
         "generated_at": end_ts,
+        "operations": operational_status(db),
         "runtime": {"ai_mode": config.ai_mode, "provider": config.meta_provider,
                     "model": config.meta_reasoning_model or None,
                     "configured": bool(config.meta_api_key and config.meta_reasoning_model),

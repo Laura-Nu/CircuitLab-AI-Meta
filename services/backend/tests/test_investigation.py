@@ -96,6 +96,10 @@ def finish_simulation(client, headers, configured):
         "client_id": "story-final-reading", "point_id": "TP1", "value": 2.5,
         "unit": "V", "conditions_confirmed": True, "measured_at": time.time(),
     }).status_code == 201
+    assert client.post(f"/api/v1/sessions/{sid}/functional-check", headers=headers, json={
+        "client_id": "story-synthetic-functional", "passed": True,
+        "observations": "Synthetic observation for a unit-test story", "performed_at": time.time(), "confirmed": True,
+    }).status_code == 201
     assert client.post(f"/api/v1/sessions/{sid}/verification", headers=headers).status_code == 202
     worker.process(*worker.claim())
     return sid

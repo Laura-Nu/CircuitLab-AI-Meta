@@ -21,7 +21,7 @@ from typing import Literal
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, or_, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session as DBSession
 from app import schemas as s
 from app.config import settings
@@ -57,13 +57,12 @@ from app.accounts import router as accounts_router, public_user
 from app.metrics import router as metrics_router
 from app import stories
 from app.inference import image_limit
+from app.operations import functional_result, operational_status, validate_runtime
 
 
 @asynccontextmanager
 async def lifespan(app):
-    if settings().app_env == "production":
-        if settings().database_url.startswith("sqlite") or settings().ai_mode != "meta":
-            raise RuntimeError("Producción requiere PostgreSQL y AI_MODE=meta")
+    validate_runtime()
     yield
 
 
@@ -134,6 +133,7 @@ def live():
         "status": "ok",
         "ai_mode": settings().ai_mode,
         "provider_configured": bool(settings().meta_api_key and settings().meta_reasoning_model),
+        "simulation_allowed": settings().app_env != "production",
     }
 
 
@@ -148,6 +148,8 @@ def catalog(user=Depends(current_user), language=Depends(request_language)):
 def ready(db: DBSession = Depends(get_db)):
     try:
         db.execute(text("SELECT 1 FROM users LIMIT 1"))
+        if settings().app_env == "production" and not operational_status(db)["worker"]["healthy"]:
+            return JSONResponse({"status": "unavailable"}, status_code=503)
         return {"status": "ready"}
     except Exception:
         return JSONResponse({"status": "unavailable"}, status_code=503)
@@ -372,7 +374,14 @@ async def upload(
     if len(raw) > settings().max_upload_mb * 1024 * 1024:
         raise HTTPException(413, "Imagen demasiado grande")
     storage = LocalStorage()
+    # Lock the owner across all investigations so concurrent uploads share one quota.
+    db.scalar(select(User).where(User.id == user.id).with_for_update())
+    used = db.scalar(select(func.coalesce(func.sum(Evidence.size), 0)).join(
+        Session, Session.id == Evidence.session_id).where(Session.owner_id == user.id))
     key, sha, mime, size = storage.save(raw)
+    if used + size > settings().max_storage_mb_per_user * 1024 * 1024:
+        storage.delete(key)
+        raise HTTPException(413, "Se alcanzó el límite de almacenamiento de tu cuenta")
     evidence = Evidence(session_id=session_id, client_id=client_id, key=key, mime=mime, sha256=sha, size=size)
     try:
         db.add(evidence)
@@ -517,6 +526,7 @@ def intervention(
     db.flush()
     session.pending_test = {
         "after": row.created_at,
+        "intervention_id": row.id,
         "instruction": session.specification["functional_description"],
     }
     record(db, session, "intervention_confirmed", {"intervention_id": row.id, "description": row.description})
@@ -541,6 +551,35 @@ def confirm_connection(
     return serialize(session)
 
 
+@app.post(prefix + "/sessions/{session_id}/functional-check", status_code=201)
+def record_functional_check(
+    session_id: str, body: s.FunctionalCheck,
+    user=Depends(current_user), db: DBSession = Depends(get_db),
+):
+    session = authorized(db, session_id, user, write=True)
+    if session.state != "verifying":
+        raise HTTPException(409, "Primero confirma la intervención humana")
+    existing = db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.kind == "functional_check_recorded",
+        Event.data["client_id"].as_string() == body.client_id,
+    ))
+    if existing:
+        return {"event_id": existing.id, **existing.data}
+    after = session.pending_test["after"]
+    if not after <= body.performed_at <= time.time() + 30:
+        raise HTTPException(422, "La prueba funcional debe realizarse después de la intervención")
+    data = {
+        **body.model_dump(exclude={"confirmed"}), "after": after,
+        "spec_version": session.spec_version, "confirmed_by": user.id,
+        "criteria": session.specification["functional_description"],
+        "source": "human_observation",
+    }
+    record(db, session, "functional_check_recorded", data)
+    commit(db)
+    result = functional_result(db, session)
+    return result
+
+
 @app.post(prefix + "/sessions/{session_id}/verification", status_code=202)
 def verify(session_id: str, user=Depends(current_user), db: DBSession = Depends(get_db)):
     session = authorized(db, session_id, user, write=True)
@@ -553,7 +592,11 @@ def verify(session_id: str, user=Depends(current_user), db: DBSession = Depends(
             )
         )
     )
-    missing = {p["id"] for p in session.specification["points"]} - {m.point_id for m in measurements}
+    if functional_result(db, session) is None:
+        raise HTTPException(409, "Registra el resultado de la prueba funcional antes de verificar")
+    missing = {p["id"] for p in session.specification["points"]} - {
+        m.point_id for m in measurements if m.measured_at >= session.pending_test["after"]
+    }
     if missing:
         raise HTTPException(409, f"Faltan medidas posteriores para: {', '.join(sorted(missing))}")
     job = enqueue(db, session, "verification")
@@ -675,6 +718,8 @@ def request_hardware(
     device = db.get(Device, body.device_id)
     if not device or device.owner_id != user.id or body.point_id not in device.points:
         raise HTTPException(403, "Dispositivo o punto no autorizado")
+    if device.simulated and settings().app_env == "production":
+        raise HTTPException(422, "Simulación deshabilitada en producción")
     if not device.last_seen or device.last_seen < time.time() - 15:
         raise HTTPException(409, "Bridge desconectado")
     active = db.scalar(
@@ -700,6 +745,8 @@ def request_hardware(
 
 
 def accept_result(db, device, result):
+    if settings().app_env == "production" and (device.simulated or result.source == "simulated"):
+        raise ValueError("Simulation is forbidden in production")
     command = db.scalar(select(Command).where(Command.id == result.command_id).with_for_update())
     if not command or command.device_id != device.id or command.status not in {"pending", "sent"}:
         return
@@ -748,7 +795,7 @@ async def connect(websocket: WebSocket):
     credential = digest(auth.removeprefix("Bearer "))
     with SessionLocal() as db:
         device = db.scalar(select(Device).where(Device.token_digest == credential))
-        if not device:
+        if not device or (device.simulated and settings().app_env == "production"):
             await websocket.close(code=4401)
             return
         device_id = device.id
@@ -758,7 +805,8 @@ async def connect(websocket: WebSocket):
             outgoing = []
             with SessionLocal() as db:
                 device = db.get(Device, device_id)
-                if device.token_digest != credential:
+                if (device.token_digest != credential
+                        or (device.simulated and settings().app_env == "production")):
                     await websocket.close(code=4401)
                     return
                 device.last_seen = time.time()

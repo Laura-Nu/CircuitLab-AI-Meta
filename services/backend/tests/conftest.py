@@ -13,7 +13,7 @@ from app.security import hash_password  # noqa: E402
 
 @pytest.fixture
 def database(tmp_path, monkeypatch):
-    from app import main, worker
+    from app import accounts, main, worker
     from app.config import settings
 
     database_url = os.environ.get("TEST_DATABASE_URL", "sqlite://")
@@ -26,6 +26,7 @@ def database(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(worker, "SessionLocal", factory)
+    monkeypatch.setattr(accounts, "SessionLocal", factory)
     monkeypatch.setattr(main, "SessionLocal", factory)
     monkeypatch.setattr(settings(), "storage_root", str(tmp_path))
     monkeypatch.setattr(settings(), "ai_mode", "simulation")

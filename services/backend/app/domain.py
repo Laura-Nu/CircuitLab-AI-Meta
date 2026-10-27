@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm.exc import StaleDataError
 from app.db import Event, Job, Member, Session
+from app.operations import BudgetExceeded, ensure_budget
 
 TRANSITIONS = {
     "draft": {"ready", "awaiting_evidence", "cancelled"},
@@ -56,6 +57,11 @@ def enqueue(db, session, kind="analysis"):
     )
     if active:
         return active
+    if session.diagnosis_mode == "meta" and kind in {"analysis", "storyboard"}:
+        try:
+            ensure_budget(db, session.owner_id)
+        except BudgetExceeded:
+            raise HTTPException(429, "Se alcanzó el límite diario de análisis; inténtalo mañana") from None
     if kind == "analysis":
         if not session.spec_version:
             raise HTTPException(409, "Confirma el esquema y los criterios funcionales antes del análisis")

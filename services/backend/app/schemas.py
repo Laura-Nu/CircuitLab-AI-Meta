@@ -111,6 +111,14 @@ class ConnectionConfirmation(Strict):
     confirmed: Literal[True]
 
 
+class FunctionalCheck(Strict):
+    client_id: str = Field(min_length=8, max_length=80)
+    passed: bool
+    observations: str = Field(min_length=5, max_length=2000)
+    performed_at: float = Field(gt=0)
+    confirmed: Literal[True]
+
+
 class Enroll(Strict):
     name: str = Field(min_length=2, max_length=120)
     points: list[str] = Field(min_length=1, max_length=8)

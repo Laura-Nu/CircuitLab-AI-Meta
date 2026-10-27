@@ -41,6 +41,8 @@ def prepare(output, domain, site_root="/var/www/circuitlab", port=8014):
     password = secrets.token_urlsafe(36)
     env = {
         "SESSION_IDLE_MINUTES": "240",
+        "DAILY_AI_JOBS_PER_USER": "20", "DAILY_AI_JOBS_GLOBAL": "200", "MAX_STORAGE_MB_PER_USER": "250",
+        "BACKUP_SSH_TARGET": "",
         "APP_ENV": "production", "APP_ORIGIN": "https://" + domain, "SITE_ROOT": site_root,
         "CIRCUITLAB_PROJECT_NAME": "circuitlab", "CIRCUITLAB_IMAGE": "circuitlab-vps-backend:0.1.0",
         "API_BIND_PORT": str(port), "POSTGRES_USER": "circuitlab", "POSTGRES_PASSWORD": password,

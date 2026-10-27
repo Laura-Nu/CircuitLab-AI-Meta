@@ -5,15 +5,17 @@ LIMITATIONS = {
     "es": [
         "Solo familias y puntos confirmados; no acredita conexiones ocultas.",
         "Las lecturas manuales y simuladas conservan su origen.",
-        "La verificación evalúa únicamente los criterios eléctricos declarados.",
+        "La verificación combina los criterios eléctricos declarados con la prueba funcional registrada por la persona.",
     ],
     "en": [
         "Only confirmed circuit families and points; hidden connections are not established.",
         "Manual and simulated readings retain their source labels.",
-        "Verification evaluates only the declared electrical criteria.",
+        "Verification combines the declared electrical criteria with the operator-recorded functional test.",
     ],
 }
 EVENTS = {
+    "functional_check_recorded": ("Prueba funcional registrada", "Functional test recorded"),
+    "production_provider_probe": ("Prueba real del proveedor", "Real provider probe"),
     "story_requested": ("Historia solicitada", "Story requested"),
     "story_completed": ("Historia creada", "Story created"),
     "story_failed": ("Falló la historia", "Story failed"),
@@ -139,8 +141,16 @@ def render_markdown(report, language):
         data = item["data"]
         lines.append(f"- {text('Criterios cumplidos', 'Criteria met')}: {yes if data['passed'] else no}")
         lines.append(
-            f"- {text('Verificación física acreditada', 'Physical verification established')}: {yes if data['physical_verification'] else no}"
+            f"- {text('Verificación física acreditada', 'Physical verification established')}: {yes if data['physical_verification'] and data.get('functional_check') else no}"
         )
+        functional = data.get("functional_check")
+        if not functional:
+            lines.append(text("Verificación histórica de voltaje: no incluye una prueba funcional registrada.", "Historical voltage verification: no recorded functional test is included."))
+        if functional:
+            lines.append(f"- {text('Prueba funcional observada', 'Observed functional test')}: {safe_text(functional['observations'])}")
+            lines.append(f"- {text('Resultado funcional', 'Functional result')}: {yes if functional['passed'] else no}")
+            lines.append(f"- {text('Condición comprobada', 'Checked condition')}: {safe_text(functional['criteria'])}")
+        lines.append(f"- {text('Origen de las lecturas', 'Reading source')}: {safe_text(data.get('verification_basis', 'legacy'))}")
         for check in data["checks"]:
             lines.append(
                 f"  - {check['point_id']}: {check['value']} V / {check['min_v']}–{check['max_v']} V · {label(check['source'], language)}"

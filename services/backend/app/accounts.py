@@ -1,6 +1,7 @@
 """Account administration and single-use recovery. No credentials in API responses or audit."""
 
 import logging
+import re
 import secrets
 import time
 from email.message import EmailMessage
@@ -9,7 +10,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app import schemas as s
 from app.config import settings
-from app.db import AccountEvent, Device, RecoveryLimit, Token, User, get_db, uid
+from app.db import AccountEvent, Device, EmailDelivery, RecoveryLimit, SessionLocal, Token, User, get_db, uid
 from app.i18n import request_language
 from app.security import administrator, authentication_response, browser_origin, current_user, digest, hash_password, issue_tokens
 
@@ -48,7 +49,7 @@ def recovery_available():
     )
 
 
-def deliver_recovery(email, raw, language):
+def deliver_recovery(email, raw, language, delivery_id=None):
     """After the generic HTTP response. Development files stay outside the public web root."""
     config = settings()
     query = urlencode({"token": raw})
@@ -74,6 +75,7 @@ def deliver_recovery(email, raw, language):
             else "Si no lo solicitaste, ignora este mensaje. El enlace funciona una sola vez."
         )
     )
+    status, provider_id, http_status = "failed", None, None
     try:
         if config.recovery_delivery == "file" and config.app_env == "development":
             directory = Path(config.recovery_directory)
@@ -85,6 +87,7 @@ def deliver_recovery(email, raw, language):
             with target.open("xb") as output:
                 target.chmod(0o600)
                 output.write(bytes(message))
+            status = "development_file"
         elif config.recovery_delivery == "resend" and recovery_available():
             response = httpx.post(
                 "https://api.resend.com/emails",
@@ -100,14 +103,10 @@ def deliver_recovery(email, raw, language):
                 },
                 timeout=10,
             )
+            http_status = response.status_code
             response.raise_for_status()
-            receipt = response.json()
-            if (
-                not isinstance(receipt, dict)
-                or not isinstance(receipt.get("id"), str)
-                or not receipt["id"].strip()
-            ):
-                raise ValueError("Invalid email delivery response")
+            status, provider_id = "accepted", safe_resend_receipt(response)
+
     except Exception as exc:
         if isinstance(exc, httpx.HTTPStatusError):
             log.error(
@@ -117,6 +116,28 @@ def deliver_recovery(email, raw, language):
             )
         else:
             log.error("Password recovery delivery failed: %s", type(exc).__name__)
+    finally:
+        if delivery_id:
+            try:
+                with SessionLocal() as db:
+                    delivery = db.get(EmailDelivery, delivery_id)
+                    if delivery:
+                        delivery.status, delivery.provider_id = status, provider_id
+                        delivery.http_status, delivery.updated_at = http_status, time.time()
+                        db.commit()
+            except Exception as exc:
+                log.error("Email receipt persistence failed: %s", type(exc).__name__)
+
+
+
+def safe_resend_receipt(response):
+    receipt = response.json()
+    key = settings().resend_api_key.get_secret_value()
+    if (not isinstance(receipt, dict) or not isinstance(receipt.get("id"), str)
+            or not re.fullmatch(r"[A-Za-z0-9-]{1,200}", receipt["id"])
+            or (key and key in receipt["id"])):
+        raise ValueError("Invalid email delivery response")
+    return receipt["id"]
 
 
 def limited(db, key, maximum):
@@ -140,6 +161,9 @@ def start_recovery(db, email, request, tasks, language, actor=None):
         user = db.scalar(select(User).where(User.email == email, User.active == 1).with_for_update())
         if user:
             db.execute(delete(Token).where(Token.user_id == user.id, Token.kind == "password_reset"))
+            db.execute(update(EmailDelivery).where(
+                EmailDelivery.user_id == user.id, EmailDelivery.status == "pending"
+            ).values(status="superseded", updated_at=time.time()))
             raw = secrets.token_urlsafe(48)
             db.add(
                 Token(
@@ -150,7 +174,10 @@ def start_recovery(db, email, request, tasks, language, actor=None):
                 )
             )
             audit(db, actor, user, "recovery_requested")
-            tasks.add_task(deliver_recovery, email, raw, language)
+            delivery = EmailDelivery(user_id=user.id, provider="resend" if settings().recovery_delivery == "resend" else "file")
+            db.add(delivery)
+            db.flush()
+            tasks.add_task(deliver_recovery, email, raw, language, delivery.id)
     db.commit()
     return {"status": "accepted"}
 
@@ -331,3 +358,57 @@ def account_events(
         ],
         "has_more": len(rows) > 100,
     }
+
+
+@router.get("/admin/email-deliveries")
+def email_deliveries(user=Depends(administrator), db: Session = Depends(get_db)):
+    rows = db.scalars(select(EmailDelivery).order_by(EmailDelivery.created_at.desc()).limit(50))
+    return {"items": [public_delivery(row) for row in rows]}
+
+
+def public_delivery(row):
+    return {"id": row.id, "provider": row.provider, "purpose": row.purpose, "status": row.status,
+            "http_status": row.http_status, "created_at": row.created_at, "updated_at": row.updated_at,
+            "can_refresh": row.provider == "resend" and bool(row.provider_id)}
+
+
+def refresh_delivery(db, row):
+    """Retrieve delivery status only. Provider response bodies/reset links are never persisted."""
+    config = settings()
+    if row.provider != "resend" or not row.provider_id or not recovery_available():
+        raise HTTPException(409, "No hay un recibo de Resend disponible")
+    try:
+        response = httpx.get("https://api.resend.com/emails/" + row.provider_id,
+                            headers={"Authorization": "Bearer " + config.resend_api_key.get_secret_value()}, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        allowed = {"sent", "delivered", "delivery_delayed", "bounced", "complained", "opened", "clicked",
+                   "scheduled", "canceled", "failed", "suppressed"}
+        if not isinstance(payload, dict) or payload.get("id") != row.provider_id or payload.get("last_event") not in allowed:
+            raise ValueError("Invalid delivery status receipt")
+        row.status, row.updated_at = payload["last_event"], time.time()
+        db.commit()
+    except Exception as exc:
+        log.warning("Resend status retrieval failed: %s", type(exc).__name__)
+        restricted = False
+        if isinstance(exc, httpx.HTTPStatusError):
+            try:
+                payload = exc.response.json()
+                restricted = isinstance(payload, dict) and payload.get("name") == "restricted_api_key"
+            except ValueError:
+                pass
+        detail = ("La clave de Resend permite enviar, pero no consultar recibos" if restricted
+                  else "No se pudo consultar el estado de Resend")
+        failure = HTTPException(502, detail)
+        failure.provider_http_status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        failure.provider_error_code = "restricted_api_key" if restricted else None
+        raise failure from None
+    return public_delivery(row)
+
+
+@router.post("/admin/email-deliveries/{delivery_id}/refresh")
+def refresh_email_delivery(delivery_id: str, user=Depends(administrator), db: Session = Depends(get_db)):
+    row = db.get(EmailDelivery, delivery_id)
+    if not row:
+        raise HTTPException(404, "Recibo de correo inexistente")
+    return refresh_delivery(db, row)

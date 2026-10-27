@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../core/networking/api.dart';
+import 'operations_panel.dart';
 import '../l10n/app_strings.dart';
 import '../main.dart' show mint, muted;
 
@@ -363,6 +364,10 @@ class _MetricsPanelState extends State<MetricsPanel> {
               );
             },
           ),
+          if (data?['operations'] is Map) ...[
+            const SizedBox(height: 18),
+            OperationsPanel(api: widget.api, status: map(data!['operations'])),
+          ],
           const SizedBox(height: 18),
           box(
             tr('metricsTrend'),

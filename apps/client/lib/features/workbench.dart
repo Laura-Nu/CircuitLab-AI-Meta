@@ -15,6 +15,7 @@ import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
 import 'metrics.dart';
+import 'functional_check.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
 
@@ -58,7 +59,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   List<dynamic> sessions = [], devices = [], events = [];
   Map<String, dynamic>? selected;
   String mode = '', section = 'sessions';
-  bool providerConfigured = false;
+  bool providerConfigured = false, simulationAllowed = false;
   bool passwordVisible = false, confirmationVisible = false;
   String? error;
   bool busy = false, restoring = true, refreshing = false;
@@ -170,6 +171,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           events = history;
           mode = health['ai_mode'];
           providerConfigured = health['provider_configured'] == true;
+          simulationAllowed = health['simulation_allowed'] == true;
           pending = 0;
           error = null;
         });
@@ -1071,9 +1073,20 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                 if (editable && state == 'verifying')
                   Padding(
                     padding: EdgeInsets.only(top: 12),
-                    child: FilledButton(
-                      onPressed: busy ? null : () => post('verification'),
-                      child: Text(tr('evaluateFunctionalCriteria')),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: busy ? null : recordFunctionalCheck,
+                          icon: Icon(Icons.fact_check_outlined),
+                          label: Text(tr('recordFunctionalTest')),
+                        ),
+                        FilledButton(
+                          onPressed: busy ? null : () => post('verification'),
+                          child: Text(tr('evaluateFunctionalCriteria')),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -1245,14 +1258,28 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               for (final v in s['verifications']) ...[
                 Divider(),
                 Text(
-                  v['data']['passed'] == true
+                  v['data']['functional_check'] == null
+                      ? tr('legacyVoltageOnly')
+                      : v['data']['passed'] == true
                       ? tr('theElectricalCriteriaAreMet')
                       : tr('theFunctionalCriterionIsNotMet'),
                   style: TextStyle(
                     color: v['data']['passed'] == true ? mint : Colors.amber,
                   ),
                 ),
-                if (v['data']['physical_verification'] != true)
+                if (v['data']['functional_check'] != null) ...[
+                  Text(v['data']['functional_check']['observations'] ?? ''),
+                  Text(
+                    tr('verificationSource', {
+                      'source': AppStrings.of(
+                        context,
+                      ).label(v['data']['verification_basis'] ?? 'manual'),
+                    }),
+                    style: TextStyle(color: muted),
+                  ),
+                ],
+                if (v['data']['physical_verification'] != true ||
+                    v['data']['functional_check'] == null)
                   Text(
                     tr('thisDoesNotEstablishFullPhysicalVerification'),
                     style: TextStyle(color: Colors.amber),
@@ -1323,6 +1350,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         'story_failed': tr('storyFailed'),
         'diagnosis_updated': tr('hypothesesUpdated'),
         'verification_completed': tr('functionalCriteriaEvaluated'),
+        'functional_check_recorded': tr('recordFunctionalTest'),
         'job_error': tr('analysisError', {
           'error': AppStrings.of(context).label(e['data']['code']),
         }),
@@ -1650,6 +1678,23 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     value.dispose();
   }
 
+  Future<void> recordFunctionalCheck() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => FunctionalCheckDialog(
+        criteria: selected!['specification']['functional_description'] ?? '',
+      ),
+    );
+    if (result != null) {
+      await post('functional-check', {
+        ...result,
+        'client_id': clientId(),
+        'performed_at': DateTime.now().millisecondsSinceEpoch / 1000,
+        'confirmed': true,
+      });
+    }
+  }
+
   Future<void> confirmIntervention() async {
     final text = TextEditingController();
     final accepted = await dialog(
@@ -1829,7 +1874,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   Future<void> enroll() async {
     final name = TextEditingController();
     final calibration = TextEditingController();
-    bool simulated = true;
+    bool simulated = false;
     final accepted = await dialog(
       tr('registerBridge'),
       StatefulBuilder(
@@ -1840,13 +1885,14 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             SizedBox(height: 16),
             field(calibration, tr('calibrationIdentifier')),
             SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: simulated,
-              onChanged: (v) => update(() => simulated = v),
-              title: Text(tr('simulatedDevice')),
-              subtitle: Text(tr('disableOnlyWhenUsingCalibratedInstruments')),
-            ),
+            if (simulationAllowed)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: simulated,
+                onChanged: (v) => update(() => simulated = v),
+                title: Text(tr('simulatedDevice')),
+                subtitle: Text(tr('disableOnlyWhenUsingCalibratedInstruments')),
+              ),
           ],
         ),
       ),

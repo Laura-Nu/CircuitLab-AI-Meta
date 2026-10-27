@@ -1,6 +1,7 @@
 """Opt-in loopback integration test. Creates a clearly labelled synthetic session."""
 
 import argparse
+import uuid
 import time
 from urllib.parse import urlparse
 import httpx
@@ -90,6 +91,11 @@ def main():
             {"description": "Intervención sintética para verificar el flujo de software", "confirmed": True},
         )
         measurement(2.5, "synthetic-after-")
+        post(path + "/functional-check", {
+            "client_id": "synthetic-functional-" + uuid.uuid4().hex,
+            "passed": True, "observations": "Synthetic fixture observation; no physical test performed",
+            "performed_at": time.time(), "confirmed": True,
+        })
         wait_job(post(path + "/verification")["job_id"])
         report = api.get(path + "/report").json()
         assert report["state"] == "resolved"

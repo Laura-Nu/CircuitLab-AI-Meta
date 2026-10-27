@@ -20,6 +20,7 @@ from app.db import (
 from app.domain import record, serialize, transition
 from app.meta import analyze
 from app import stories
+from app.operations import BudgetExceeded, functional_result, heartbeat, reserve_budget, validate_runtime
 
 log = logging.getLogger("circuitlab.worker")
 
@@ -109,7 +110,7 @@ def evaluate(db, session):
         db.scalars(
             select(Measurement)
             .where(Measurement.session_id == session.id, Measurement.phase == "verification")
-            .order_by(Measurement.created_at)
+            .order_by(Measurement.measured_at, Measurement.created_at)
         )
     )
     latest = {m.point_id: m for m in readings if m.measured_at >= session.pending_test["after"]}
@@ -127,15 +128,21 @@ def evaluate(db, session):
                 "passed": bool(reading and point["min_v"] <= reading.value <= point["max_v"]),
             }
         )
-    passed = all(c["passed"] for c in checks)
+    functional = functional_result(db, session)
+    electrical_passed = all(c["passed"] for c in checks)
+    passed = electrical_passed and bool(functional and functional["passed"])
+    sources = {c["source"] for c in checks}
     data = {
         "spec_version": session.spec_version,
         "criteria": session.specification,
         "checks": checks,
+        "electrical_passed": electrical_passed,
+        "functional_check": functional,
+        "verification_basis": "mixed" if len(sources) > 1 else next(iter(sources), "missing"),
         "passed": passed,
         "physical_verification": passed
         and session.diagnosis_mode == "meta"
-        and all(c["source"] != "simulated" for c in checks),
+        and sources.issubset({"manual", "instrumented"}),
     }
     db.add(Verification(session_id=session.id, data=data))
     record(db, session, "verification_completed", data)
@@ -146,12 +153,19 @@ def process(job_id, lease_token):
     try:
         with SessionLocal() as db:
             job = db.get(Job, job_id)
+            if not job or job.status != "running" or job.lease_token != lease_token or job.lease_until < time.time():
+                return
             session = db.get(Session, job.session_id)
             context = snapshot(db, session)
             kind = job.kind
             exhausted = session.analysis_steps >= settings().max_analysis_steps
             story = db.scalar(select(Storyboard).where(Storyboard.job_id == job.id)) if kind == "storyboard" else None
             story_input = story.snapshot if story else None
+            if session.diagnosis_mode == "meta" and (
+                (kind == "analysis" and not exhausted) or kind == "storyboard"
+            ):
+                reserve_budget(db, session.owner_id)
+                db.commit()
         output = metadata = None
         story_output = None
         if kind == "storyboard":
@@ -229,7 +243,8 @@ def process(job_id, lease_token):
             db.commit()
     except Exception as exc:
         # Keep secrets, provider response bodies and user images out of logs and errors.
-        code = "provider_unavailable" if isinstance(exc, RuntimeError) else "analysis_failed"
+        code = ("daily_quota_exceeded" if isinstance(exc, BudgetExceeded) else
+                "provider_unavailable" if isinstance(exc, RuntimeError) else "analysis_failed")
         log.warning("Job %s failed: %s", job_id, type(exc).__name__)
         with SessionLocal() as db:
             job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
@@ -249,13 +264,13 @@ def process(job_id, lease_token):
                         "status": "error",
                         "error": code,
                         "exception_type": type(exc).__name__,
-                        "possible_provider_consumption": True,
+                        "possible_provider_consumption": not isinstance(exc, BudgetExceeded),
                     },
                 )
             )
             job.error = code
             status = getattr(exc, "audit", {}).get("http_status", 0)
-            permanent_failure = 400 <= status < 500 and status not in {408, 429}
+            permanent_failure = isinstance(exc, BudgetExceeded) or (400 <= status < 500 and status not in {408, 429})
             if job.attempts < 3 and not permanent_failure:
                 job.status = "pending"
                 job.lease_until = time.time() + 2**job.attempts
@@ -282,8 +297,15 @@ def expire_commands():
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    validate_runtime()
+    worker_id = uid()
+    from pathlib import Path
+    import tempfile
+    (Path(tempfile.gettempdir()) / "circuitlab-worker.id").write_text(worker_id)
     while True:
         try:
+            with SessionLocal() as db:
+                heartbeat(db, worker_id)
             expire_commands()
             claimed = claim()
             if claimed:

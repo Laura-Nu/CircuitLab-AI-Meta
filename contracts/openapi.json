@@ -388,6 +388,75 @@
         }
       }
     },
+    "/api/v1/admin/email-deliveries": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Email Deliveries",
+        "operationId": "email_deliveries_api_v1_admin_email_deliveries_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/email-deliveries/{delivery_id}/refresh": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Refresh Email Delivery",
+        "operationId": "refresh_email_delivery_api_v1_admin_email_deliveries__delivery_id__refresh_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/metrics": {
       "get": {
         "tags": [
@@ -1204,6 +1273,58 @@
         }
       }
     },
+    "/api/v1/sessions/{session_id}/functional-check": {
+      "post": {
+        "summary": "Record Functional Check",
+        "operationId": "record_functional_check_api_v1_sessions__session_id__functional_check_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FunctionalCheck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}/verification": {
       "post": {
         "summary": "Verify",
@@ -1726,6 +1847,46 @@
           "calibration_id"
         ],
         "title": "Enroll"
+      },
+      "FunctionalCheck": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Client Id"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "observations": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Observations"
+          },
+          "performed_at": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Performed At"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "client_id",
+          "passed",
+          "observations",
+          "performed_at",
+          "confirmed"
+        ],
+        "title": "FunctionalCheck"
       },
       "HTTPValidationError": {
         "properties": {

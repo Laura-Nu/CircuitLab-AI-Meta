@@ -24,7 +24,7 @@ jobs:
         working-directory: services/backend
       - run: uv run ruff check .
         working-directory: services/backend
-      - run: uv run --project services/backend ruff check experiments scripts/evaluate.py scripts/prepare_vps.py scripts/deploy_vps.py
+      - run: uv run --project services/backend ruff check experiments scripts/evaluate.py scripts/prepare_vps.py scripts/deploy_vps.py scripts/backup_vps.py
       - run: uv run alembic upgrade head
         working-directory: services/backend
         env:

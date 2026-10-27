@@ -39,6 +39,14 @@ def measure(client, headers, sid, value, key="manual-001"):
     )
 
 
+def functional(client, headers, sid, passed=True):
+    return client.post(f"{P}/sessions/{sid}/functional-check", headers=headers, json={
+        "client_id": "unit-functional-result", "passed": passed,
+        "observations": "Synthetic functional observation for isolated unit test",
+        "performed_at": time.time(), "confirmed": True,
+    })
+
+
 def test_full_diagnosis_and_deterministic_verification(client, headers, configured):
     sid = start(client, headers, configured)
     assert client.get(f"{P}/sessions/{sid}", headers=headers).json()["state"] == "awaiting_measurement"
@@ -53,6 +61,7 @@ def test_full_diagnosis_and_deterministic_verification(client, headers, configur
     assert result.status_code == 201
     assert client.post(f"{P}/sessions/{sid}/verification", headers=headers).status_code == 409
     assert measure(client, headers, sid, 2.5, "post-001").status_code == 201
+    assert functional(client, headers, sid).status_code == 201
     assert client.post(f"{P}/sessions/{sid}/verification", headers=headers).status_code == 202
     run_job()
     report = client.get(f"{P}/sessions/{sid}/report", headers=headers).json()
@@ -74,6 +83,7 @@ def test_failed_repair_is_inconclusive(client, headers, configured):
         json={"description": "Revisé el cable sin éxito", "confirmed": True},
     )
     measure(client, headers, sid, 0.1, "post-002")
+    assert functional(client, headers, sid, passed=False).status_code == 201
     client.post(f"{P}/sessions/{sid}/verification", headers=headers)
     run_job()
     assert client.get(f"{P}/sessions/{sid}", headers=headers).json()["state"] == "inconclusive"

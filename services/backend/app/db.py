@@ -75,6 +75,32 @@ class RecoveryLimit(Base):
     attempts = Column(Integer, nullable=False)
 
 
+class UsageCounter(Base):
+    __tablename__ = "usage_counters"
+    scope = Column(String(100), primary_key=True)
+    day = Column(Integer, primary_key=True)
+    attempts = Column(Integer, nullable=False, default=0)
+
+
+class WorkerHeartbeat(Base):
+    __tablename__ = "worker_heartbeats"
+    id = Column(String, primary_key=True)
+    last_seen = Column(UTCInstant, nullable=False)
+
+
+class EmailDelivery(Base):
+    __tablename__ = "email_deliveries"
+    id = Column(String, primary_key=True, default=uid)
+    user_id = Column(ForeignKey("users.id"), nullable=True, index=True)
+    purpose = Column(String(30), nullable=False, default="password_recovery")
+    provider = Column(String(20), nullable=False, default="resend")
+    status = Column(String(30), nullable=False, default="pending")
+    provider_id = Column(String(200), nullable=True)
+    http_status = Column(Integer, nullable=True)
+    created_at = Column(UTCInstant, nullable=False, default=time.time)
+    updated_at = Column(UTCInstant, nullable=False, default=time.time)
+
+
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
     id = Column(String, primary_key=True, default=uid)

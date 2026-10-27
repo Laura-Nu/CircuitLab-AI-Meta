@@ -4,6 +4,14 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "La clave de Resend permite enviar, pero no consultar recibos": ("resend_read_permission_required", "This Resend key can send emails but cannot retrieve receipts; configure read permission"),
+    "No hay un recibo de Resend disponible": ("email_receipt_unavailable", "No Resend receipt is available"),
+    "No se pudo consultar el estado de Resend": ("email_status_unavailable", "Could not retrieve Resend delivery status"),
+    "Recibo de correo inexistente": ("email_receipt_not_found", "Email delivery receipt not found"),
+    "Se alcanzó el límite diario de análisis; inténtalo mañana": ("daily_quota_exceeded", "Daily analysis limit reached; try again tomorrow"),
+    "Se alcanzó el límite de almacenamiento de tu cuenta": ("storage_quota_exceeded", "Your account storage limit has been reached"),
+    "Registra el resultado de la prueba funcional antes de verificar": ("functional_check_required", "Record the functional test result before verification"),
+    "La prueba funcional debe realizarse después de la intervención": ("functional_check_too_old", "The functional test must take place after the intervention"),
     "Origen no autorizado": ("origin_forbidden", "Request origin is not allowed"),
     "Demasiados registros; inténtalo en 15 minutos": ("registration_rate_limited", "Too many registrations; try again in 15 minutes"),
     "Máximo 8 imágenes con este proveedor": ("provider_image_limit", "This provider supports at most 8 images"),
