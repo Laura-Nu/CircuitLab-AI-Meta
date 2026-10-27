@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="{{locale}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0d1319">
+  <meta name="description" content="{{description}}" data-i18n-content="description">
+  <title>{{pageTitle}}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="alternate" hreflang="es" href="/">
+  <link rel="alternate" hreflang="en" href="/en/">
+  <link rel="stylesheet" href="/assets/landing.css">
+  <script id="landing-messages" type="application/json">{{messages}}</script>
+  <script type="module" src="/assets/landing.js"></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main" data-i18n="skip">{{skip}}</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/" aria-label="CircuitLab AI"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 9h14v14H9zM12 4v5m8-5v5M12 23v5m8-5v5M4 12h5m-5 8h5m14-8h5m-5 8h5M14 14h4v4h-4z"/></svg><span>CircuitLab<span class="brand-ai">AI</span></span></a>
+      <nav aria-label="{{navigation}}" data-i18n-aria-label="navigation" class="desktop-nav">
+        <a href="#how-it-works" data-i18n="navHow">{{navHow}}</a><a href="#circuits" data-i18n="navCircuits">{{navCircuits}}</a><a href="#project" data-i18n="navScope">{{navScope}}</a>
+      </nav>
+      <div class="header-actions">
+        <div class="language-switch" role="group" aria-label="{{language}}" data-i18n-aria-label="language"><button type="button" data-language="es" aria-label="Español" aria-pressed="{{esPressed}}">ES</button><button type="button" data-language="en" aria-label="English" aria-pressed="{{enPressed}}">EN</button></div>
+        <a class="header-enter" href="/app/?lang={{locale}}" data-app-link><span data-i18n="enter">{{enter}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+    <section class="hero container" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">{{eyebrow}}</span></p>
+        <h1 id="hero-title"><span data-i18n="heroTop">{{heroTop}}</span><br><span class="mint" data-i18n="heroAccent">{{heroAccent}}</span></h1>
+        <p class="hero-description" data-i18n="heroBody">{{heroBody}}</p>
+        <div class="hero-actions"><a class="button button-primary" href="/app/?lang={{locale}}" data-app-link><span data-i18n="enter">{{enter}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a><a class="text-link" href="#how-it-works"><span data-i18n="heroSecondary">{{heroSecondary}}</span><span aria-hidden="true">↙</span></a></div>
+        <p class="hero-note"><span aria-hidden="true">↳</span> <span data-i18n="heroNote">{{heroNote}}</span></p>
+      </div>
+      <div class="circuit-demo" data-stage="evidence">
+        <div class="board-toolbar"><span><span class="tiny-square"></span> <span data-i18n="boardTitle">{{boardTitle}}</span></span><span class="example-badge" data-i18n="illustrative">{{illustrative}}</span></div>
+        <div class="circuit-canvas">
+          <svg viewBox="0 0 520 350" role="img" aria-label="{{illustration}}" data-i18n-aria-label="illustration" class="circuit-graphic">
+            <defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".8" fill="#31413f"/></pattern><filter id="glow"><feGaussianBlur stdDeviation="4"/></filter></defs>
+            <rect width="520" height="350" fill="url(#grid)"/>
+            <g class="wires"><path d="M105 62H258V100m0 66v56m0 66v30M258 188h148"/><path d="M238 318h40m-34 8h28m-21 8h14"/></g>
+            <g class="resistors"><rect x="242" y="100" width="32" height="66" rx="3"/><rect x="242" y="222" width="32" height="66" rx="3"/></g>
+            <g class="circuit-label"><text x="289" y="128">R1</text><text x="289" y="149" class="dim">10 kΩ</text><text x="289" y="249">R2</text><text x="289" y="270" class="dim">10 kΩ</text><text x="84" y="102">5 V</text><text x="84" y="121" class="dim" data-i18n="boardSupply">{{boardSupply}}</text><text x="390" y="222">TP2</text><text x="390" y="241" class="dim" data-i18n="boardOutput">{{boardOutput}}</text><text x="235" y="307" class="dim">GND</text></g>
+            <circle cx="105" cy="62" r="6" class="test-point"/><circle cx="258" cy="188" r="4" class="junction"/><circle cx="406" cy="188" r="13" class="point-halo" filter="url(#glow)"/><circle cx="406" cy="188" r="7" class="active-point"/>
+            <g class="board-brackets"><path d="M20 42V20h22m436 0h22v22M20 308v22h22m436 0h22v-22"/></g>
+          </svg>
+          <div class="reading"><span class="micro-label" data-i18n="readingLabel">{{readingLabel}}</span><strong id="reading-value">— <small>V</small></strong><span class="reading-state" id="reading-state" data-i18n="readingHint">{{readingHint}}</span></div>
+        </div>
+        <div class="stage-controls" role="group" aria-label="{{stageLabel}}" data-i18n-aria-label="stageLabel"><button type="button" data-step="evidence" aria-pressed="true" data-i18n="stageEvidence">{{stageEvidence}}</button><button type="button" data-step="measure" aria-pressed="false" data-i18n="stageMeasure">{{stageMeasure}}</button><button type="button" data-step="verify" aria-pressed="false" data-i18n="stageVerify">{{stageVerify}}</button></div>
+        <div class="stage-description" aria-live="polite" aria-atomic="true"><h2 id="stage-title" data-i18n="evidenceTitle">{{evidenceTitle}}</h2><p id="stage-body" data-i18n="evidenceBody">{{evidenceBody}}</p></div>
+        <p class="example-note" data-i18n="exampleNote">{{exampleNote}}</p>
+      </div>
+    </section>
+    <div class="container pillars"><span><i aria-hidden="true">01</i><span data-i18n="pillarOne">{{pillarOne}}</span></span><span><i aria-hidden="true">02</i><span data-i18n="pillarTwo">{{pillarTwo}}</span></span><span><i aria-hidden="true">03</i><span data-i18n="pillarThree">{{pillarThree}}</span></span><span><i aria-hidden="true">04</i><span data-i18n="pillarFour">{{pillarFour}}</span></span></div>
+    <section id="how-it-works" class="container section" aria-labelledby="how-title">
+      <div class="section-heading"><p class="eyebrow" data-i18n="howEyebrow">{{howEyebrow}}</p><h2 id="how-title" data-i18n="howTitle">{{howTitle}}</h2><p data-i18n="howBody">{{howBody}}</p></div>
+      <div class="steps"><article><span class="step-number">01</span><h3 data-i18n="stepOneTitle">{{stepOneTitle}}</h3><p data-i18n="stepOneBody">{{stepOneBody}}</p></article><article><span class="step-number">02</span><h3 data-i18n="stepTwoTitle">{{stepTwoTitle}}</h3><p data-i18n="stepTwoBody">{{stepTwoBody}}</p></article><article><span class="step-number">03</span><h3 data-i18n="stepThreeTitle">{{stepThreeTitle}}</h3><p data-i18n="stepThreeBody">{{stepThreeBody}}</p></article><article><span class="step-number">04</span><h3 data-i18n="stepFourTitle">{{stepFourTitle}}</h3><p data-i18n="stepFourBody">{{stepFourBody}}</p></article></div>
+    </section>
+    <section class="detail-section"><div class="container detail-grid"><div><p class="eyebrow" data-i18n="detailEyebrow">{{detailEyebrow}}</p><h2 data-i18n="detailTitle">{{detailTitle}}</h2><p data-i18n="detailBody">{{detailBody}}</p><ul class="check-list"><li data-i18n="detailOne">{{detailOne}}</li><li data-i18n="detailTwo">{{detailTwo}}</li><li data-i18n="detailThree">{{detailThree}}</li><li data-i18n="detailFour">{{detailFour}}</li></ul></div><div class="trace"><p class="micro-label" data-i18n="traceTitle">{{traceTitle}}</p><ol><li><span class="trace-dot"></span><h3 data-i18n="traceOneTitle">{{traceOneTitle}}</h3><p data-i18n="traceOneBody">{{traceOneBody}}</p></li><li><span class="trace-dot"></span><h3 data-i18n="traceTwoTitle">{{traceTwoTitle}}</h3><p data-i18n="traceTwoBody">{{traceTwoBody}}</p></li><li><span class="trace-dot"></span><h3 data-i18n="traceThreeTitle">{{traceThreeTitle}}</h3><p data-i18n="traceThreeBody">{{traceThreeBody}}</p></li><li><span class="trace-dot"></span><h3 data-i18n="traceFourTitle">{{traceFourTitle}}</h3><p data-i18n="traceFourBody">{{traceFourBody}}</p></li></ol></div></div></section>
+    <section id="circuits" class="container section" aria-labelledby="circuits-title"><div class="section-heading"><p class="eyebrow" data-i18n="circuitsEyebrow">{{circuitsEyebrow}}</p><h2 id="circuits-title" data-i18n="circuitsTitle">{{circuitsTitle}}</h2><p data-i18n="circuitsBody">{{circuitsBody}}</p></div>
+      <div class="families"><article><div class="family-visual"><svg viewBox="0 0 240 120" aria-hidden="true"><path d="M20 60h45m0-12h42v24H65zM107 60h40m0-18 28 18-28 18zM178 40v40m0-20h42m-48-32 16-15m-9 22 16-15"/></svg><span>01 / LED</span></div><h3 data-i18n="ledTitle">{{ledTitle}}</h3><p data-i18n="ledBody">{{ledBody}}</p></article><article><div class="family-visual"><svg viewBox="0 0 240 120" aria-hidden="true"><path d="M22 60h31m0-12h42v24H53zM95 60h35m0-12h42v24h-42zM172 60h45M112 60V25h55"/><circle cx="112" cy="60" r="3"/><circle cx="167" cy="25" r="5"/></svg><span>02 / VOUT</span></div><h3 data-i18n="dividerTitle">{{dividerTitle}}</h3><p data-i18n="dividerBody">{{dividerBody}}</p></article><article><div class="family-visual"><svg viewBox="0 0 240 120" aria-hidden="true"><rect x="82" y="24" width="76" height="72" rx="6"/><path d="M93 42h15l8 30 9-35 8 23h15M45 42h37m-37 36h37m76-36h37m-37 36h37M103 12v12m32-12v12m-32 72v12m32-12v12"/></svg><span>03 / ADC</span></div><h3 data-i18n="sensorTitle">{{sensorTitle}}</h3><p data-i18n="sensorBody">{{sensorBody}}</p></article></div><p class="section-note" data-i18n="circuitsNote">{{circuitsNote}}</p>
+    </section>
+    <section id="project" class="container section project-grid" aria-labelledby="scope-title"><div><p class="eyebrow" data-i18n="scopeEyebrow">{{scopeEyebrow}}</p><h2 id="scope-title" data-i18n="scopeTitle">{{scopeTitle}}</h2><p data-i18n="scopeBody">{{scopeBody}}</p></div><div class="project-points"><article><span class="project-symbol" aria-hidden="true">↗</span><h3 data-i18n="scopeOneTitle">{{scopeOneTitle}}</h3><p data-i18n="scopeOneBody">{{scopeOneBody}}</p></article><article><span class="project-symbol mono" aria-hidden="true">A/a</span><h3 data-i18n="scopeTwoTitle">{{scopeTwoTitle}}</h3><p data-i18n="scopeTwoBody">{{scopeTwoBody}}</p></article><article><span class="project-symbol" aria-hidden="true">⌁</span><h3 data-i18n="scopeThreeTitle">{{scopeThreeTitle}}</h3><p data-i18n="scopeThreeBody">{{scopeThreeBody}}</p></article></div></section>
+    <section class="container section faq" aria-labelledby="faq-title"><h2 id="faq-title" data-i18n="faqTitle">{{faqTitle}}</h2><div><details><summary data-i18n="faqOneQ">{{faqOneQ}}</summary><p data-i18n="faqOneA">{{faqOneA}}</p></details><details><summary data-i18n="faqTwoQ">{{faqTwoQ}}</summary><p data-i18n="faqTwoA">{{faqTwoA}}</p></details><details><summary data-i18n="faqThreeQ">{{faqThreeQ}}</summary><p data-i18n="faqThreeA">{{faqThreeA}}</p></details><details><summary data-i18n="faqFourQ">{{faqFourQ}}</summary><p data-i18n="faqFourA">{{faqFourA}}</p></details></div></section>
+    <section class="container closing"><div><p class="eyebrow" data-i18n="closingEyebrow">{{closingEyebrow}}</p><h2 data-i18n="closingTitle">{{closingTitle}}</h2><p data-i18n="closingBody">{{closingBody}}</p></div><a class="button button-primary" href="/app/?lang={{locale}}" data-app-link><span data-i18n="enter">{{enter}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a></section>
+  </main>
+  <footer class="container footer"><div><a class="brand" href="/">CircuitLab<span class="brand-ai">AI</span></a><p data-i18n="footer">{{footer}}</p></div><p data-i18n="footerScope">{{footerScope}}</p><a href="#top" data-i18n="backTop">{{backTop}}</a></footer>
+</body>
+</html>

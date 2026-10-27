@@ -1,0 +1,24 @@
+[project]
+name = "circuitlab-backend"
+version = "0.1.0"
+description = "Evidence-driven low-voltage circuit diagnosis"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.12", "uvicorn[standard]==0.34.2", "sqlalchemy==2.0.40",
+  "psycopg[binary]==3.2.6", "alembic==1.15.2", "pydantic-settings==2.9.1",
+  "httpx==0.28.1", "python-multipart==0.0.20", "pillow==11.2.1",
+]
+
+[dependency-groups]
+dev = ["pytest==8.3.5", "ruff==0.11.7"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

@@ -1,0 +1,7 @@
+{
+  "name": "circuitlab-landing-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test tests/landing.test.mjs"},
+  "devDependencies": {"linkedom": "0.18.12"}
+}

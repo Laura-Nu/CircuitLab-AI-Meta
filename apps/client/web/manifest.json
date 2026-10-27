@@ -1,0 +1,11 @@
+{
+  "name": "CircuitLab AI",
+  "short_name": "CircuitLab",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0d1319",
+  "theme_color": "#10171e",
+  "description": "Diagnóstico electrónico con evidencia y verificación.",
+  "prefer_related_applications": false,
+  "icons": [{"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

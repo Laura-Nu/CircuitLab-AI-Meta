@@ -1,0 +1,12 @@
+{
+  "version": "pilot-1",
+  "seed": 20261023,
+  "methods": ["initial_only", "free_questions", "fixed_tests", "structured"],
+  "repetitions": 2,
+  "max_model_calls": 4,
+  "max_queries": 3,
+  "max_tokens_per_call": 1000,
+  "fixed_order": ["TP1", "TP2", "TP3"],
+  "input_usd_per_million": null,
+  "output_usd_per_million": null
+}

@@ -1,0 +1,55 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "command_id": {
+      "title": "Command Id",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "action": {
+      "const": "read_voltage",
+      "default": "read_voltage",
+      "title": "Action",
+      "type": "string"
+    },
+    "point_id": {
+      "title": "Point Id",
+      "type": "string"
+    },
+    "sample_count": {
+      "default": 20,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Sample Count",
+      "type": "integer"
+    },
+    "deadline_ms": {
+      "default": 3000,
+      "maximum": 10000,
+      "minimum": 100,
+      "title": "Deadline Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "command_id",
+    "session_id",
+    "device_id",
+    "point_id"
+  ],
+  "title": "HardwareCommand",
+  "type": "object"
+}

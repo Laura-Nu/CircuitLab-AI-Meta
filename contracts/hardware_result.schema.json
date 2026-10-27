@@ -1,0 +1,83 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "command_id": {
+      "title": "Command Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "timeout",
+        "disconnected",
+        "out_of_range",
+        "precondition_failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "point_id": {
+      "title": "Point Id",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    },
+    "unit": {
+      "const": "V",
+      "default": "V",
+      "title": "Unit",
+      "type": "string"
+    },
+    "sample_count": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Sample Count",
+      "type": "integer"
+    },
+    "source": {
+      "enum": [
+        "instrumented",
+        "simulated"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "calibration_id": {
+      "title": "Calibration Id",
+      "type": "string"
+    },
+    "measured_at": {
+      "title": "Measured At",
+      "type": "number"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "command_id",
+    "status",
+    "point_id",
+    "sample_count",
+    "source",
+    "calibration_id",
+    "measured_at"
+  ],
+  "title": "HardwareResult",
+  "type": "object"
+}
