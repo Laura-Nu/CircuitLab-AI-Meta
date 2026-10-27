@@ -370,6 +370,81 @@ faults are outside the current scope. Simulation has been exercised locally; the
 live verifier checks configured model inference separately. Real Resend delivery, calibrated hardware, physical-device behavior
 and production deployment still require validation in their configured environments.
 
+## Public access and session lifetime
+
+Anyone can create a member account from the landing or `/app/#/register`.
+The public registration schema does not accept a role; administration remains
+restricted to administrators. Registration attempts are rate-limited by source IP.
+Android and web share the same account and session data through the API.
+
+Web sign-in keeps the refresh credential in a host-only, HttpOnly, SameSite=Strict
+cookie (Secure in production); the access credential stays in memory. Android
+stores its refresh credential in platform secure storage. Reloading the web app
+restores an unexpired session without placing credentials in localStorage.
+
+`SESSION_IDLE_MINUTES=240` is the default minimum idle window. Human pointer,
+scroll and keyboard input triggers a throttled activity heartbeat. The backend
+extends only that login session. Automatic polling, token refresh and restoration
+do not extend inactivity. Both access and refresh requests reject an expired
+session; the client returns to sign-in on expiration, including after resuming.
+Native refresh tokens rotate on use. The browser cookie remains stable within its
+login session so concurrent tabs can restore without invalidating one another.
+Cookie refresh requests require the configured application Origin.
+
+Migration `0005` introduces durable authentication sessions and invalidates
+legacy access/refresh tokens once. Existing users and investigation data remain;
+users sign in again after the upgrade. Password-reset links are preserved.
+
+## Android download
+
+The landing provides public registration, Android download and browser access in
+English and Spanish. The same chip mark is used in the landing, client and Android
+launcher. The Android application uses the production HTTPS API; provider keys
+never belong in Flutter build arguments or downloaded artifacts.
+
+On a build workstation with Flutter 3.35.6, a compatible JDK and Android SDK:
+
+```bash
+python3 scripts/prepare_android_signing.py
+cd apps/client
+flutter pub get --enforce-lockfile
+flutter build apk --release --dart-define=API_BASE_URL=https://circuitlab.doc-ia.cloud/api/v1 --dart-define=SITE_ORIGIN=https://circuitlab.doc-ia.cloud
+cd ../..
+mkdir -p releases/android
+cp apps/client/build/app/outputs/flutter-apk/app-release.apk releases/android/circuitlab-ai.apk
+sha256sum releases/android/circuitlab-ai.apk > releases/android/circuitlab-ai.apk.sha256
+python3 scripts/build_site.py
+```
+
+Commit `releases/android/circuitlab-ai.apk` and its checksum with the source changes.
+This public, signed APK is versioned in regular Git; generated `build/` directories
+and private signing files remain ignored. After each new Android release, replace
+the APK at this fixed path, update the checksum and commit both files. Keep the
+same signing identity and increment the application build number for updates.
+
+Release builds require a private signing identity and do not use the debug key.
+The helper creates it once in ignored `.tools/android-signing/` and writes ignored
+`apps/client/android/key.properties`; it preserves an existing identity. Back up
+both securely: future APK updates must use the same signing identity. These files
+are not needed on the VPS when uploading the built public artifacts.
+
+The packager copies the versioned APK from `releases/android/circuitlab-ai.apk`
+to `build/site/downloads/circuitlab-ai.apk` and writes a public SHA-256 sidecar.
+The versioned release takes priority over any old local Android build. `--apk`
+can explicitly select another APK; a local build is the fallback when the repository
+has no release. The APK is excluded from the backend Docker build context.
+
+On the VPS, `git pull --ff-only origin main` downloads the committed APK together
+with the code. Build the web client and run `python3 scripts/build_site.py` as usual;
+the landing download is updated automatically without a separate APK upload or
+Android compilation on the server. Rebuilding the web client remains necessary
+because its generated output is not versioned.
+
+If no APK is available, the landing explicitly shows download preparation instead
+of advertising a broken link. An existing published APK is retained on web-only
+updates. The packager sets public directories to 755 and files to 644, without
+changing private environment or signing-file permissions.
+
 ## Shared Linux VPS deployment
 
 The production domain is `circuitlab.doc-ia.cloud`. The landing is served at
@@ -416,6 +491,7 @@ password on updates; changing an environment file does not reset PostgreSQL.
 From `/var/www/circuitlab`:
 
 ```bash
+umask 022
 cd apps/client
 flutter pub get --enforce-lockfile
 flutter build web --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1

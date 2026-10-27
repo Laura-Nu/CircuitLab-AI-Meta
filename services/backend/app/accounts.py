@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import case, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -19,7 +19,7 @@ from app import schemas as s
 from app.config import settings
 from app.db import AccountEvent, Device, RecoveryLimit, Token, User, get_db, uid
 from app.i18n import request_language
-from app.security import administrator, current_user, digest, hash_password
+from app.security import administrator, authentication_response, browser_origin, current_user, digest, hash_password, issue_tokens
 
 router = APIRouter(prefix="/api/v1", tags=["accounts"])
 log = logging.getLogger("circuitlab.accounts")
@@ -153,6 +153,30 @@ def start_recovery(db, email, request, tasks, language, actor=None):
             tasks.add_task(deliver_recovery, email, raw, language)
     db.commit()
     return {"status": "accepted"}
+
+
+@router.post("/auth/register", status_code=201)
+def register(body: s.AccountRegister, request: Request, response: Response, db: Session = Depends(get_db)):
+    if body.client == "web":
+        browser_origin(request)
+    ip = request.client.host if request.client else "unknown"
+    blocked = limited(db, "signup:" + ip, 10)
+    db.commit()
+    if blocked:
+        raise HTTPException(429, "Demasiados registros; inténtalo en 15 minutos")
+    # Role is deliberately absent from the public schema and cannot be self-assigned.
+    account = User(email=body.email, password=hash_password(body.password), role="member")
+    db.add(account)
+    try:
+        db.flush()
+        audit(db, None, account, "member_registered")
+        result = issue_tokens(db, account.id)
+        result["user"] = public_user(account)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Ya existe una cuenta con ese correo") from None
+    return authentication_response(result, response, body.client == "web")
 
 
 @router.get("/auth/me")

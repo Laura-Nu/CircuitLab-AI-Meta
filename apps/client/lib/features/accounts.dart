@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/networking/api.dart';
+import '../core/password_visibility.dart';
 import '../l10n/app_strings.dart';
 import '../l10n/language.dart';
 import '../main.dart';
@@ -21,6 +22,7 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
   final confirmation = TextEditingController();
   final token = TextEditingController();
   bool busy = false, done = false;
+  bool passwordVisible = false, confirmationVisible = false;
   String? error;
   String tr(String key) => AppStrings.of(context).t(key);
   @override
@@ -139,11 +141,17 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: password,
-                          obscureText: true,
+                          obscureText: !passwordVisible,
                           maxLength: 200,
                           autofillHints: const [AutofillHints.newPassword],
                           decoration: InputDecoration(
                             labelText: tr('newPassword'),
+                            suffixIcon: PasswordVisibilityButton(
+                              visible: passwordVisible,
+                              onPressed: () => setState(
+                                () => passwordVisible = !passwordVisible,
+                              ),
+                            ),
                           ),
                           validator: (v) => (v?.length ?? 0) >= 12
                               ? null
@@ -152,9 +160,16 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: confirmation,
-                          obscureText: true,
+                          obscureText: !confirmationVisible,
                           decoration: InputDecoration(
                             labelText: tr('confirmPassword'),
+                            suffixIcon: PasswordVisibilityButton(
+                              visible: confirmationVisible,
+                              onPressed: () => setState(
+                                () =>
+                                    confirmationVisible = !confirmationVisible,
+                              ),
+                            ),
                           ),
                           validator: (v) => v == password.text
                               ? null
@@ -269,6 +284,7 @@ class _AccountsPanelState extends State<AccountsPanel> {
     final email = TextEditingController(), password = TextEditingController();
     final form = GlobalKey<FormState>();
     String role = 'member';
+    bool passwordVisible = false;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -298,10 +314,15 @@ class _AccountsPanelState extends State<AccountsPanel> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: password,
-                      obscureText: true,
+                      obscureText: !passwordVisible,
                       maxLength: 200,
                       decoration: InputDecoration(
                         labelText: tr('initialPassword'),
+                        suffixIcon: PasswordVisibilityButton(
+                          visible: passwordVisible,
+                          onPressed: () =>
+                              update(() => passwordVisible = !passwordVisible),
+                        ),
                       ),
                       validator: (v) =>
                           (v?.length ?? 0) >= 12 ? null : tr('passwordMinimum'),

@@ -8,6 +8,7 @@ import 'l10n/document_language.dart';
 import 'core/networking/api.dart';
 import 'features/workbench.dart';
 import 'features/accounts.dart';
+import 'core/session_activity.dart';
 
 final apiProvider = Provider((ref) => CircuitApi());
 const mint = Color(0xFF6CE5BC);
@@ -25,6 +26,10 @@ class CircuitLabApp extends ConsumerStatefulWidget {
 class _CircuitLabAppState extends ConsumerState<CircuitLabApp> {
   late final router = GoRouter(
     routes: [
+      GoRoute(
+        path: '/register',
+        builder: (_, state) => const Workbench(registering: true),
+      ),
       GoRoute(
         path: '/forgot-password',
         builder: (_, state) => const RecoveryPage(),
@@ -50,6 +55,10 @@ class _CircuitLabAppState extends ConsumerState<CircuitLabApp> {
     updateDocumentLanguage(locale.languageCode);
     return MaterialApp.router(
       title: 'CircuitLab AI',
+      builder: (context, child) => SessionActivity(
+        api: ref.read(apiProvider),
+        child: child ?? const SizedBox(),
+      ),
       debugShowCheckedModeBanner: false,
       routerConfig: router,
       locale: locale,

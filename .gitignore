@@ -20,3 +20,7 @@ experiments/private/
 *.private.json
 *.eml
 .architecture-backup/
+
+# Private Android release signing credentials.
+apps/client/android/key.properties
+*.keystore

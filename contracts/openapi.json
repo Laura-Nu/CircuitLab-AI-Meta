@@ -5,6 +5,45 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRegister"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "tags": [
@@ -535,6 +574,27 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/auth/activity": {
+      "post": {
+        "summary": "Activity",
+        "operationId": "activity_api_v1_auth_activity_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/logout": {
@@ -1531,6 +1591,38 @@
         ],
         "title": "AccountEmail"
       },
+      "AccountRegister": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 12,
+            "title": "Password"
+          },
+          "client": {
+            "type": "string",
+            "enum": [
+              "native",
+              "web"
+            ],
+            "title": "Client",
+            "default": "native"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "AccountRegister"
+      },
       "AccountUpdate": {
         "properties": {
           "role": {
@@ -1708,6 +1800,15 @@
             "maxLength": 200,
             "minLength": 8,
             "title": "Password"
+          },
+          "client": {
+            "type": "string",
+            "enum": [
+              "native",
+              "web"
+            ],
+            "title": "Client",
+            "default": "native"
           }
         },
         "additionalProperties": false,
@@ -1831,17 +1932,21 @@
       "Refresh": {
         "properties": {
           "refresh_token": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 20,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Refresh Token"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "refresh_token"
-        ],
         "title": "Refresh"
       },
       "SessionCreate": {

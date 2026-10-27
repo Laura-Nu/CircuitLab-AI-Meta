@@ -42,7 +42,7 @@
   "password": "Password",
   "connecting": "Connecting…",
   "enterTheLaboratory": "Enter the laboratory  →",
-  "05VCircuitsAndroidAndWebAccounts": "0–5 V circuits · Android and web\nAccounts are created by an administrator.",
+  "05VCircuitsAndroidAndWebAccounts": "0–5 V circuits · One account for Android and web",
   "yourConnectedLaboratory": "Your connected laboratory",
   "diagnosticSessions": "Diagnostic sessions",
   "observeTestAndVerifyEveryRepair": "Observe, test and verify every repair.",
@@ -343,5 +343,16 @@
   "metricsAccuracy": "Diagnostic accuracy",
   "metricsAccuracyUnavailable": "Not measured yet",
   "metricsAccuracyNotice": "A reviewed dataset with known outcomes is required. Accepted responses and passed voltage checks do not establish diagnostic accuracy.",
-  "metricsUnknown": "Unknown"
+  "metricsUnknown": "Unknown",
+  "backToLanding": "Back to the homepage",
+  "createMemberAccount": "Create your account",
+  "memberSignupDescription": "Join as a member and start your first circuit investigation.",
+  "createAccount": "Create account",
+  "createAccountLink": "New here? Create an account",
+  "alreadyHaveAccount": "Already have an account? Sign in",
+  "passwordsMustMatch": "The passwords must match.",
+  "downloadAndroid": "Download for Android",
+  "sessionExpiredIdle": "Your session expired after four hours of inactivity. Sign in again to continue.",
+  "showPassword": "Show password",
+  "hidePassword": "Hide password"
 }

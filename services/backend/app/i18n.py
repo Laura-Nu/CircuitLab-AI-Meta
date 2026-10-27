@@ -4,6 +4,8 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "Origen no autorizado": ("origin_forbidden", "Request origin is not allowed"),
+    "Demasiados registros; inténtalo en 15 minutos": ("registration_rate_limited", "Too many registrations; try again in 15 minutes"),
     "Máximo 8 imágenes con este proveedor": ("provider_image_limit", "This provider supports at most 8 images"),
     "Demasiadas imágenes para el proveedor seleccionado": ("provider_image_limit", "Too many images for the selected provider"),
     "Completa el diagnóstico antes de crear la historia": ("story_not_ready", "Complete the diagnosis before creating a story"),

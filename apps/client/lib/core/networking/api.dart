@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'transport_stub.dart' if (dart.library.js_interop) 'transport_web.dart';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -13,21 +14,95 @@ String clientId() => List.generate(
   (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
 ).join();
 
-class CircuitApi {
+class CircuitApi extends ChangeNotifier {
   final Dio dio;
+  final DateTime Function() now;
   final OfflineStore outbox;
   final secure = const FlutterSecureStorage();
   String? access;
   String? refresh;
   Future<void>? _renewing;
+  DateTime? idleDeadline;
+  bool sessionExpired = false;
+  bool _activityPending = false;
+  DateTime? _lastHumanInput;
+  bool _touching = false;
+  DateTime _lastTouch = DateTime.fromMillisecondsSinceEpoch(0);
+  bool get canRenew => kIsWeb || refresh != null;
+
+  void recordActivity() {
+    if (signedIn && idleDeadline != null && !expireIfIdle()) {
+      _activityPending = true;
+      _lastHumanInput = now();
+    }
+  }
+
+  bool expireIfIdle() {
+    if (signedIn && idleDeadline != null && !now().isBefore(idleDeadline!)) {
+      clearCredentials(expired: true);
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> tickSession() async {
+    if (expireIfIdle() ||
+        !signedIn ||
+        idleDeadline == null ||
+        !_activityPending ||
+        _touching ||
+        now().difference(_lastTouch) < const Duration(seconds: 30)) {
+      return;
+    }
+    // Do not replay stale offline input as current activity on reconnection.
+    if (_lastHumanInput == null ||
+        now().difference(_lastHumanInput!) > const Duration(minutes: 1)) {
+      _activityPending = false;
+      return;
+    }
+    _touching = true;
+    _activityPending = false;
+    try {
+      final data = await request('/auth/activity', method: 'POST');
+      if (!signedIn) return;
+      _setDeadline(data);
+      _lastTouch = now();
+      await _persistSession();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        await clearCredentials(expired: true);
+      } else {
+        _activityPending = true;
+      }
+    } finally {
+      _touching = false;
+    }
+  }
+
+  void _setDeadline(dynamic data) {
+    if (data is Map && data['idle_expires_at'] is num) {
+      idleDeadline = DateTime.fromMillisecondsSinceEpoch(
+        ((data['idle_expires_at'] as num) * 1000).round(),
+      );
+    }
+  }
+
+  Future<void> _persistSession() async {
+    if (!kIsWeb) {
+      await secure.write(key: 'refresh', value: refresh);
+      await secure.write(key: 'email', value: email);
+    }
+  }
+
   String email = '';
   String language = 'es';
   Map<String, dynamic>? account;
   bool get isAdmin => account?['role'] == 'admin';
   bool get signedIn => access != null;
   String get scope => '${dio.options.baseUrl}|$email';
-  CircuitApi({OfflineStore? store})
-    : outbox = store ?? Outbox(),
+  CircuitApi({OfflineStore? store, DateTime Function()? clock})
+    : now = clock ?? DateTime.now,
+      outbox = store ?? Outbox(),
       dio = Dio(
         BaseOptions(
           baseUrl: const String.fromEnvironment(
@@ -38,6 +113,7 @@ class CircuitApi {
           receiveTimeout: const Duration(seconds: 25),
         ),
       ) {
+    configureTransport(dio);
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -48,22 +124,39 @@ class CircuitApi {
     );
   }
   Future<void> restore() async {
-    if (kIsWeb) return;
-    email = await secure.read(key: 'email') ?? '';
-    refresh = await secure.read(key: 'refresh');
-    if (refresh != null) {
-      try {
-        await renew();
-      } catch (_) {
-        access = null;
-      }
+    if (signedIn) return;
+    if (!kIsWeb) {
+      email = await secure.read(key: 'email') ?? '';
+      refresh = await secure.read(key: 'refresh');
+      if (refresh == null) return;
     }
+    try {
+      await renew();
+    } on DioException catch (_) {
+      access = null;
+    }
+  }
+
+  Future<void> register(String mail, String password) async {
+    final response = await dio.post(
+      '/auth/register',
+      data: {
+        'email': mail,
+        'password': password,
+        'client': kIsWeb ? 'web' : 'native',
+      },
+    );
+    await accept(response.data);
   }
 
   Future<void> login(String mail, String password) async {
     final response = await dio.post(
       '/auth/login',
-      data: {'email': mail, 'password': password},
+      data: {
+        'email': mail,
+        'password': password,
+        'client': kIsWeb ? 'web' : 'native',
+      },
     );
     email = mail.toLowerCase();
     await accept(response.data);
@@ -73,10 +166,12 @@ class CircuitApi {
     access = data['access_token'];
     refresh = data['refresh_token'];
     if (data['user'] is Map) account = Map<String, dynamic>.from(data['user']);
-    if (!kIsWeb) {
-      await secure.write(key: 'refresh', value: refresh);
-      await secure.write(key: 'email', value: email);
-    }
+    if (account?['email'] is String) email = account!['email'];
+    _setDeadline(data);
+    sessionExpired = false;
+    _lastTouch = now();
+    await _persistSession();
+    notifyListeners();
   }
 
   Future<void> renew() =>
@@ -86,11 +181,11 @@ class CircuitApi {
     try {
       final response = await dio.post(
         '/auth/refresh',
-        data: {'refresh_token': refresh},
+        data: kIsWeb ? <String, dynamic>{} : {'refresh_token': refresh},
       );
       await accept(response.data);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) await clearCredentials();
+      if (e.response?.statusCode == 401) await clearCredentials(expired: true);
       rethrow;
     }
   }
@@ -110,7 +205,7 @@ class CircuitApi {
         ),
       )).data;
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401 && refresh != null) {
+      if (e.response?.statusCode == 401 && canRenew) {
         await renew();
         return (await dio.request(
           path,
@@ -133,11 +228,19 @@ class CircuitApi {
     }
   }
 
-  Future<void> clearCredentials() async {
+  Future<void> clearCredentials({bool expired = false}) async {
+    sessionExpired = expired;
+    idleDeadline = null;
+    _activityPending = false;
+    _lastHumanInput = null;
     access = null;
     refresh = null;
     account = null;
-    if (!kIsWeb) await secure.deleteAll();
+    notifyListeners();
+    if (!kIsWeb) {
+      await secure.delete(key: 'refresh');
+      await secure.delete(key: 'email');
+    }
   }
 
   Future<bool> saveMeasurement(
@@ -193,7 +296,7 @@ class CircuitApi {
         options: Options(headers: {'Authorization': 'Bearer $access'}),
       );
     } on DioException catch (e) {
-      if (e.response?.statusCode != 401 || refresh == null) rethrow;
+      if (e.response?.statusCode != 401 || !canRenew) rethrow;
       await renew();
       await dio.post(
         item['path'],

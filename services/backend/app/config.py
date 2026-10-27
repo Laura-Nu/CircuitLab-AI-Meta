@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ai_mode: str = "meta"
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 7
+    session_idle_minutes: int = Field(default=240, ge=240, le=1440)
     max_upload_mb: int = 10
     max_analysis_steps: int = 8
     worker_lease_seconds: int = 120

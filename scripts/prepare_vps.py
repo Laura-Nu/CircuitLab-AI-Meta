@@ -40,6 +40,7 @@ def prepare(output, domain, site_root="/var/www/circuitlab", port=8014):
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     password = secrets.token_urlsafe(36)
     env = {
+        "SESSION_IDLE_MINUTES": "240",
         "APP_ENV": "production", "APP_ORIGIN": "https://" + domain, "SITE_ROOT": site_root,
         "CIRCUITLAB_PROJECT_NAME": "circuitlab", "CIRCUITLAB_IMAGE": "circuitlab-vps-backend:0.1.0",
         "API_BIND_PORT": str(port), "POSTGRES_USER": "circuitlab", "POSTGRES_PASSWORD": password,

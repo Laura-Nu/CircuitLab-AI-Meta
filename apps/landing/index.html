@@ -17,9 +17,9 @@
   <a class="skip-link" href="#main" data-i18n="skip">{{skip}}</a>
   <header class="site-header">
     <div class="container header-inner">
-      <a class="brand" href="/" aria-label="CircuitLab AI"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 9h14v14H9zM12 4v5m8-5v5M12 23v5m8-5v5M4 12h5m-5 8h5m14-8h5m-5 8h5M14 14h4v4h-4z"/></svg><span>CircuitLab<span class="brand-ai">AI</span></span></a>
+      <a class="brand" href="{{landingHref}}" data-home-link aria-label="CircuitLab AI"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 9h14v14H9zM12 4v5m8-5v5M12 23v5m8-5v5M4 12h5m-5 8h5m14-8h5m-5 8h5M14 14h4v4h-4z"/></svg><span>CircuitLab<span class="brand-ai">AI</span></span></a>
       <nav aria-label="{{navigation}}" data-i18n-aria-label="navigation" class="desktop-nav">
-        <a href="#how-it-works" data-i18n="navHow">{{navHow}}</a><a href="#circuits" data-i18n="navCircuits">{{navCircuits}}</a><a href="#project" data-i18n="navScope">{{navScope}}</a>
+        <a href="#download" data-i18n="navPlatforms">{{navPlatforms}}</a><a href="#how-it-works" data-i18n="navHow">{{navHow}}</a><a href="#circuits" data-i18n="navCircuits">{{navCircuits}}</a><a href="#project" data-i18n="navScope">{{navScope}}</a>
       </nav>
       <div class="header-actions">
         <div class="language-switch" role="group" aria-label="{{language}}" data-i18n-aria-label="language"><button type="button" data-language="es" aria-label="Español" aria-pressed="{{esPressed}}">ES</button><button type="button" data-language="en" aria-label="English" aria-pressed="{{enPressed}}">EN</button></div>
@@ -33,7 +33,7 @@
         <p class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">{{eyebrow}}</span></p>
         <h1 id="hero-title"><span data-i18n="heroTop">{{heroTop}}</span><br><span class="mint" data-i18n="heroAccent">{{heroAccent}}</span></h1>
         <p class="hero-description" data-i18n="heroBody">{{heroBody}}</p>
-        <div class="hero-actions"><a class="button button-primary" href="/app/?lang={{locale}}" data-app-link><span data-i18n="enter">{{enter}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a><a class="text-link" href="#how-it-works"><span data-i18n="heroSecondary">{{heroSecondary}}</span><span aria-hidden="true">↙</span></a></div>
+        <div class="hero-actions"><a class="button button-primary" href="/app/?lang={{locale}}#/register" data-register-link><span data-i18n="createAccount">{{createAccount}}</span><span aria-hidden="true">↗</span></a><a class="button button-outline" href="#download" data-i18n="downloadAndroid">{{downloadAndroid}}</a><a class="text-link" href="#how-it-works"><span data-i18n="heroSecondary">{{heroSecondary}}</span><span aria-hidden="true">↓</span></a></div>
         <p class="hero-note"><span aria-hidden="true">↳</span> <span data-i18n="heroNote">{{heroNote}}</span></p>
       </div>
       <div class="circuit-demo" data-stage="evidence">
@@ -56,6 +56,13 @@
       </div>
     </section>
     <div class="container pillars"><span><i aria-hidden="true">01</i><span data-i18n="pillarOne">{{pillarOne}}</span></span><span><i aria-hidden="true">02</i><span data-i18n="pillarTwo">{{pillarTwo}}</span></span><span><i aria-hidden="true">03</i><span data-i18n="pillarThree">{{pillarThree}}</span></span><span><i aria-hidden="true">04</i><span data-i18n="pillarFour">{{pillarFour}}</span></span></div>
+    <section id="download" class="container section platforms" aria-labelledby="platform-title">
+      <div class="section-heading"><p class="eyebrow" data-i18n="platformEyebrow">{{platformEyebrow}}</p><h2 id="platform-title" data-i18n="platformTitle">{{platformTitle}}</h2><p data-i18n="platformBody">{{platformBody}}</p></div>
+      <div class="platform-grid">
+        <article class="platform-card"><span class="platform-tag">ANDROID</span><h3 data-i18n="androidTitle">{{androidTitle}}</h3><p data-i18n="androidBody">{{androidBody}}</p><ul class="check-list"><li data-i18n="androidOne">{{androidOne}}</li><li data-i18n="androidTwo">{{androidTwo}}</li><li data-i18n="androidThree">{{androidThree}}</li></ul>{{downloadControl}}<p class="platform-note" data-i18n="androidNote">{{androidNote}}</p></article>
+        <article class="platform-card"><span class="platform-tag">WEB</span><h3 data-i18n="webTitle">{{webTitle}}</h3><p data-i18n="webBody">{{webBody}}</p><ul class="check-list"><li data-i18n="webOne">{{webOne}}</li><li data-i18n="webTwo">{{webTwo}}</li><li data-i18n="webThree">{{webThree}}</li></ul><a class="button button-outline" href="/app/?lang={{locale}}" data-app-link data-i18n="enter">{{enter}}</a><p class="platform-note" data-i18n="webNote">{{webNote}}</p></article>
+      </div>
+    </section>
     <section id="how-it-works" class="container section" aria-labelledby="how-title">
       <div class="section-heading"><p class="eyebrow" data-i18n="howEyebrow">{{howEyebrow}}</p><h2 id="how-title" data-i18n="howTitle">{{howTitle}}</h2><p data-i18n="howBody">{{howBody}}</p></div>
       <div class="steps"><article><span class="step-number">01</span><h3 data-i18n="stepOneTitle">{{stepOneTitle}}</h3><p data-i18n="stepOneBody">{{stepOneBody}}</p></article><article><span class="step-number">02</span><h3 data-i18n="stepTwoTitle">{{stepTwoTitle}}</h3><p data-i18n="stepTwoBody">{{stepTwoBody}}</p></article><article><span class="step-number">03</span><h3 data-i18n="stepThreeTitle">{{stepThreeTitle}}</h3><p data-i18n="stepThreeBody">{{stepThreeBody}}</p></article><article><span class="step-number">04</span><h3 data-i18n="stepFourTitle">{{stepFourTitle}}</h3><p data-i18n="stepFourBody">{{stepFourBody}}</p></article></div>
@@ -68,6 +75,6 @@
     <section class="container section faq" aria-labelledby="faq-title"><h2 id="faq-title" data-i18n="faqTitle">{{faqTitle}}</h2><div><details><summary data-i18n="faqOneQ">{{faqOneQ}}</summary><p data-i18n="faqOneA">{{faqOneA}}</p></details><details><summary data-i18n="faqTwoQ">{{faqTwoQ}}</summary><p data-i18n="faqTwoA">{{faqTwoA}}</p></details><details><summary data-i18n="faqThreeQ">{{faqThreeQ}}</summary><p data-i18n="faqThreeA">{{faqThreeA}}</p></details><details><summary data-i18n="faqFourQ">{{faqFourQ}}</summary><p data-i18n="faqFourA">{{faqFourA}}</p></details></div></section>
     <section class="container closing"><div><p class="eyebrow" data-i18n="closingEyebrow">{{closingEyebrow}}</p><h2 data-i18n="closingTitle">{{closingTitle}}</h2><p data-i18n="closingBody">{{closingBody}}</p></div><a class="button button-primary" href="/app/?lang={{locale}}" data-app-link><span data-i18n="enter">{{enter}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a></section>
   </main>
-  <footer class="container footer"><div><a class="brand" href="/">CircuitLab<span class="brand-ai">AI</span></a><p data-i18n="footer">{{footer}}</p></div><p data-i18n="footerScope">{{footerScope}}</p><a href="#top" data-i18n="backTop">{{backTop}}</a></footer>
+  <footer class="container footer"><div><a class="brand" href="{{landingHref}}" data-home-link>CircuitLab<span class="brand-ai">AI</span></a><p data-i18n="footer">{{footer}}</p></div><p data-i18n="footerScope">{{footerScope}}</p><a href="#top" data-i18n="backTop">{{backTop}}</a></footer>
 </body>
 </html>

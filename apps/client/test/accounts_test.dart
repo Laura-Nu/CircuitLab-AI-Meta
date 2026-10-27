@@ -56,7 +56,7 @@ class AccountApi extends CircuitApi {
   @override
   Future<void> restore() async {}
   @override
-  Future<void> clearCredentials() async {
+  Future<void> clearCredentials({bool expired = false}) async {
     access = null;
     refresh = null;
     account = null;
@@ -220,6 +220,22 @@ void main() {
           find.widgetWithText(TextFormField, strings.t('initialPassword')),
           'initial-password-123',
         );
+        final initialPassword = find.descendant(
+          of: find.widgetWithText(TextFormField, strings.t('initialPassword')),
+          matching: find.byType(TextField),
+        );
+        expect(tester.widget<TextField>(initialPassword).obscureText, isTrue);
+        await tester.tap(find.byTooltip(strings.t('showPassword')));
+        await tester.pump();
+        expect(tester.widget<TextField>(initialPassword).obscureText, isFalse);
+        expect(
+          tester.widget<TextField>(initialPassword).controller!.text,
+          'initial-password-123',
+        );
+        await tester.tap(find.byTooltip(strings.t('hidePassword')));
+        await tester.pump();
+        expect(tester.widget<TextField>(initialPassword).obscureText, isTrue);
+
         await tester.tap(
           find.widgetWithText(FilledButton, strings.t('createUser')).last,
         );

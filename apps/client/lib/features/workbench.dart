@@ -15,10 +15,13 @@ import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
 import 'metrics.dart';
+import '../core/brand.dart';
+import '../core/password_visibility.dart';
 
 class Workbench extends ConsumerStatefulWidget {
   final String? sessionId;
-  const Workbench({super.key, this.sessionId});
+  final bool registering;
+  const Workbench({super.key, this.sessionId, this.registering = false});
   @override
   ConsumerState<Workbench> createState() => _WorkbenchState();
 }
@@ -47,14 +50,16 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     'cancelled': tr('cancelled'),
   };
 
-  CircuitApi get api => ref.read(apiProvider);
+  late final CircuitApi api;
   final mail = TextEditingController();
   final password = TextEditingController();
+  final confirmPassword = TextEditingController();
   final search = TextEditingController();
   List<dynamic> sessions = [], devices = [], events = [];
   Map<String, dynamic>? selected;
   String mode = '', section = 'sessions';
   bool providerConfigured = false;
+  bool passwordVisible = false, confirmationVisible = false;
   String? error;
   bool busy = false, restoring = true, refreshing = false;
   int pending = 0;
@@ -64,9 +69,24 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   @override
   void initState() {
     super.initState();
+    api = ref.read(apiProvider);
+    api.addListener(authChanged);
     init();
     timer = Timer.periodic(Duration(seconds: 4), (_) {
       if (api.signedIn && !busy && !refreshing) refresh(silent: true);
+    });
+  }
+
+  void authChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (!api.signedIn) {
+        selected = null;
+        sessions = [];
+        devices = [];
+        events = [];
+        section = 'sessions';
+      }
     });
   }
 
@@ -86,6 +106,8 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   @override
   void dispose() {
     timer?.cancel();
+    api.removeListener(authChanged);
+    confirmPassword.dispose();
     mail.dispose();
     password.dispose();
     search.dispose();
@@ -205,20 +227,19 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                         ),
                       Spacer(),
                       LanguageSelector(),
-                      if (mode.isNotEmpty)
-                        Flexible(
-                          child: badge(
-                            mode == 'simulation'
-                                ? tr('simulation')
-                                : providerConfigured
-                                ? tr('metaConfigured')
-                                : tr('metaNotConfigured'),
-                            mode == 'simulation' || !providerConfigured
-                                ? Colors.amber
-                                : mint,
-                          ),
+                      if (mode.isNotEmpty &&
+                          MediaQuery.sizeOf(context).width >= 680)
+                        badge(
+                          mode == 'simulation'
+                              ? tr('simulation')
+                              : providerConfigured
+                              ? tr('metaConfigured')
+                              : tr('metaNotConfigured'),
+                          mode == 'simulation' || !providerConfigured
+                              ? Colors.amber
+                              : mint,
                         ),
-                      SizedBox(width: 16),
+                      SizedBox(width: wide ? 16 : 4),
                       IconButton(
                         tooltip: tr('sync'),
                         onPressed: busy
@@ -289,13 +310,15 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     color: Color(0xFF10171E),
     child: SafeArea(
       child: Padding(
-        padding: EdgeInsets.all(22),
+        padding: EdgeInsets.fromLTRB(22, 0, 22, 22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 9),
-            brand(),
-            SizedBox(height: 46),
+            SizedBox(
+              height: 76,
+              child: Align(alignment: Alignment.centerLeft, child: brand()),
+            ),
+            SizedBox(height: 28),
             Text(
               tr('laboratory'),
               style: TextStyle(color: muted, fontSize: 10, letterSpacing: 2),
@@ -384,34 +407,8 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       },
     ),
   );
-  Widget brand() => FittedBox(
-    alignment: Alignment.centerLeft,
-    fit: BoxFit.scaleDown,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.memory_rounded, color: mint, size: 32),
-        SizedBox(width: 10),
-        Text(
-          'CircuitLab',
-          style: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -.8,
-          ),
-        ),
-        SizedBox(width: 5),
-        Text(
-          'AI',
-          style: TextStyle(
-            color: mint,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    ),
-  );
+  Widget brand() =>
+      CircuitBrand(language: api.language, tooltip: tr('backToLanding'));
 
   Widget login() => Scaffold(
     body: Center(
@@ -423,7 +420,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 90,
-            runSpacing: 40,
+            runSpacing: 24,
             children: [
               SizedBox(
                 width: math.min(440, MediaQuery.sizeOf(context).width - 48),
@@ -436,31 +433,37 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                         LanguageSelector(),
                       ],
                     ),
-                    SizedBox(height: 50),
-                    badge(tr('fromSymptomsToEvidence'), mint),
-                    SizedBox(height: 24),
-                    Text(
-                      tr('understandTheFaultVerifyTheSolution'),
-                      style: TextStyle(
-                        fontSize: 52,
-                        height: 1.1,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -2,
+                    if (MediaQuery.sizeOf(context).width >= 760) ...[
+                      SizedBox(height: 50),
+                      badge(tr('fromSymptomsToEvidence'), mint),
+                      SizedBox(height: 24),
+                      Text(
+                        tr('understandTheFaultVerifyTheSolution'),
+                        style: TextStyle(
+                          fontSize: 52,
+                          height: 1.1,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -2,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 22),
-                    Text(
-                      tr(
-                        'electronicDiagnosisGuidedByHypothesesMeasurementsAndVerifiable',
+                      SizedBox(height: 22),
+                      Text(
+                        tr(
+                          'electronicDiagnosisGuidedByHypothesesMeasurementsAndVerifiable',
+                        ),
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 16,
+                          height: 1.7,
+                        ),
                       ),
-                      style: TextStyle(color: muted, fontSize: 16, height: 1.7),
-                    ),
-                    SizedBox(height: 26),
-                    SizedBox(
-                      height: 140,
-                      width: 400,
-                      child: CustomPaint(painter: CircuitPainter()),
-                    ),
+                      SizedBox(height: 26),
+                      SizedBox(
+                        height: 140,
+                        width: 400,
+                        child: CustomPaint(painter: CircuitPainter()),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -471,7 +474,11 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        tr('welcomeToYourLaboratory'),
+                        tr(
+                          widget.registering
+                              ? 'createMemberAccount'
+                              : 'welcomeToYourLaboratory',
+                        ),
                         style: TextStyle(
                           fontSize: 23,
                           fontWeight: FontWeight.w600,
@@ -479,7 +486,11 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                       ),
                       SizedBox(height: 10),
                       Text(
-                        tr('signInWithYourLaboratoryAccount'),
+                        tr(
+                          widget.registering
+                              ? 'memberSignupDescription'
+                              : 'signInWithYourLaboratoryAccount',
+                        ),
                         style: TextStyle(color: muted),
                       ),
                       SizedBox(height: 30),
@@ -494,14 +505,52 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                       SizedBox(height: 18),
                       TextField(
                         controller: password,
-                        obscureText: true,
+                        obscureText: !passwordVisible,
                         decoration: InputDecoration(
                           labelText: tr('password'),
+                          suffixIcon: PasswordVisibilityButton(
+                            visible: passwordVisible,
+                            onPressed: () => setState(
+                              () => passwordVisible = !passwordVisible,
+                            ),
+                          ),
                           prefixIcon: Icon(Icons.lock_outline, size: 18),
                         ),
                         onSubmitted: (_) => signIn(),
                       ),
+                      if (widget.registering) ...[
+                        SizedBox(height: 18),
+                        TextField(
+                          controller: confirmPassword,
+                          obscureText: !confirmationVisible,
+                          decoration: InputDecoration(
+                            labelText: tr('confirmPassword'),
+                            suffixIcon: PasswordVisibilityButton(
+                              visible: confirmationVisible,
+                              onPressed: () => setState(
+                                () =>
+                                    confirmationVisible = !confirmationVisible,
+                              ),
+                            ),
+                            prefixIcon: Icon(Icons.lock_outline, size: 18),
+                          ),
+                          onSubmitted: (_) => signIn(),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          tr('passwordMinimum'),
+                          style: TextStyle(color: muted, fontSize: 12),
+                        ),
+                      ],
                       SizedBox(height: 24),
+                      if (api.sessionExpired)
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            tr('sessionExpiredIdle'),
+                            style: TextStyle(color: Colors.amber),
+                          ),
+                        ),
                       if (error != null)
                         Padding(
                           padding: EdgeInsets.only(bottom: 16),
@@ -513,10 +562,39 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                       FilledButton(
                         onPressed: busy ? null : signIn,
                         child: Text(
-                          busy ? tr('connecting') : tr('enterTheLaboratory'),
+                          busy
+                              ? tr('connecting')
+                              : tr(
+                                  widget.registering
+                                      ? 'createAccount'
+                                      : 'enterTheLaboratory',
+                                ),
                         ),
                       ),
-                      SizedBox(height: 20),
+                      SizedBox(height: 12),
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () {
+                                setState(() => error = null);
+                                context.go(
+                                  widget.registering ? '/' : '/register',
+                                );
+                              },
+                        child: Text(
+                          tr(
+                            widget.registering
+                                ? 'alreadyHaveAccount'
+                                : 'createAccountLink',
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => launchDownload(),
+                        icon: Icon(Icons.android),
+                        label: Text(tr('downloadAndroid')),
+                      ),
+                      SizedBox(height: 8),
                       TextButton(
                         onPressed: busy
                             ? null
@@ -542,9 +620,28 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       ),
     ),
   );
+  Future<void> launchDownload() async {
+    final url = landingUri(api.language).replace(fragment: 'download');
+    await openPublicUrl(url);
+  }
+
   void signIn() => action(() async {
-    await api.login(mail.text.trim(), password.text);
+    if (widget.registering) {
+      if (password.text.length < 12) {
+        throw Exception(tr('passwordMinimum'));
+      }
+      if (password.text != confirmPassword.text) {
+        throw Exception(tr('passwordsMustMatch'));
+      }
+      await api.register(mail.text.trim(), password.text);
+      if (mounted) context.go('/');
+    } else {
+      await api.login(mail.text.trim(), password.text);
+    }
     password.clear();
+    confirmPassword.clear();
+    passwordVisible = false;
+    confirmationVisible = false;
   });
 
   Widget dashboard() {

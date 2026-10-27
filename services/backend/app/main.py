@@ -21,11 +21,12 @@ from typing import Literal
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, or_, select, text
+from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.orm import Session as DBSession
 from app import schemas as s
 from app.config import settings
 from app.db import (
+    AuthSession,
     Command,
     Device,
     Evidence,
@@ -47,7 +48,8 @@ from app.db import (
     uid,
 )
 from app.domain import authorized, commit, enqueue, record, serialize, transition
-from app.security import current_user, digest, issue_tokens, verify_password
+from app.security import (COOKIE, COOKIE_PATH, authentication_response, browser_origin, current_user,
+                          digest, issue_tokens, session_payload, set_refresh_cookie, verify_password)
 from app.storage import LocalStorage
 from app.i18n import request_language, error_message
 from app.reports import prepare_report, render_markdown
@@ -71,6 +73,7 @@ app.include_router(metrics_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings().app_origin],
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Accept-Language"],
 )
@@ -151,7 +154,9 @@ def ready(db: DBSession = Depends(get_db)):
 
 
 @app.post(prefix + "/auth/login")
-def login(body: s.Login, db: DBSession = Depends(get_db)):
+def login(body: s.Login, request: Request, response: Response, db: DBSession = Depends(get_db)):
+    if body.client == "web":
+        browser_origin(request)
     user = db.scalar(select(User).where(User.email == body.email.lower()).with_for_update())
     if user and user.locked_until > time.time():
         raise HTTPException(429, "Demasiados intentos; espera 5 minutos")
@@ -167,29 +172,51 @@ def login(body: s.Login, db: DBSession = Depends(get_db)):
     result = issue_tokens(db, user.id)
     result["user"] = public_user(user)
     db.commit()
-    return result
+    return authentication_response(result, response, body.client == "web")
 
 
 @app.post(prefix + "/auth/refresh")
-def refresh(body: s.Refresh, db: DBSession = Depends(get_db)):
-    token = db.get(Token, digest(body.refresh_token))
-    if not token or token.kind != "refresh" or token.expires < time.time():
+def refresh(body: s.Refresh, request: Request, response: Response, db: DBSession = Depends(get_db)):
+    web = body.refresh_token is None
+    if web:
+        browser_origin(request)
+    raw = body.refresh_token or request.cookies.get(COOKIE, "")
+    token = db.get(Token, digest(raw))
+    if not token or token.kind != "refresh" or token.expires <= time.time():
         raise HTTPException(401, "Renovación inválida")
-    user_id = token.user_id
-    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
-    consumed = db.scalar(
-        delete(Token)
-        .where(
-            Token.digest == digest(body.refresh_token), Token.kind == "refresh", Token.expires > time.time()
-        )
-        .returning(Token.user_id)
-    )
+    session = db.scalar(select(AuthSession).where(AuthSession.id == token.auth_session_id).with_for_update())
+    if not session or session.idle_expires <= time.time():
+        raise HTTPException(401, "Renovación inválida")
+    user = db.scalar(select(User).where(User.id == token.user_id).with_for_update())
+    consumed = web or db.scalar(delete(Token).where(Token.digest == digest(raw), Token.kind == "refresh",
+                                Token.expires > time.time()).returning(Token.user_id))
     if not user or not user.active or not consumed:
         raise HTTPException(401, "Renovación inválida")
-    result = issue_tokens(db, user_id)
+    # Rotation alone never extends inactivity; polling and restoring are not user activity.
+    result = issue_tokens(db, user.id, session, browser_refresh=raw if web else None)
     result["user"] = public_user(user)
     db.commit()
-    return result
+    return authentication_response(result, response, web)
+
+
+@app.post(prefix + "/auth/activity")
+def activity(request: Request, response: Response, user=Depends(current_user), db: DBSession = Depends(get_db)):
+    credentials = request.headers.get("authorization", "").removeprefix("Bearer ")
+    token = db.get(Token, digest(credentials))
+    session = db.scalar(select(AuthSession).where(AuthSession.id == token.auth_session_id).with_for_update())
+    now = time.time()
+    if not session or session.idle_expires <= now:
+        raise HTTPException(401, "Credencial inválida o vencida")
+    session.last_activity = now
+    session.idle_expires = now + settings().session_idle_minutes * 60
+    db.execute(update(Token).where(Token.auth_session_id == session.id, Token.kind == "refresh")
+               .values(expires=session.idle_expires))
+    raw = request.cookies.get(COOKIE)
+    cookie_token = db.get(Token, digest(raw)) if raw else None
+    if cookie_token and cookie_token.kind == "refresh" and cookie_token.auth_session_id == session.id:
+        set_refresh_cookie(response, raw, session.idle_expires)
+    db.commit()
+    return session_payload(session)
 
 
 @app.post(prefix + "/auth/logout", status_code=204)
@@ -197,7 +224,9 @@ def logout(user=Depends(current_user), db: DBSession = Depends(get_db)):
     for token in db.scalars(select(Token).where(Token.user_id == user.id)):
         db.delete(token)
     db.commit()
-    return Response(status_code=204)
+    response = Response(status_code=204)
+    response.delete_cookie(COOKIE, path=COOKIE_PATH)
+    return response
 
 
 @app.post(prefix + "/sessions", status_code=201)

@@ -47,6 +47,8 @@ export function applyLanguage(value, {save = false, updateUrl = true} = {}) {
   document.querySelectorAll('[data-i18n-aria-label]').forEach(element => { element.setAttribute('aria-label', text[element.getAttribute('data-i18n-aria-label')]); });
   document.querySelectorAll('[data-language]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.language === value)); });
   document.querySelectorAll('[data-app-link]').forEach(link => { link.setAttribute('href', appHref(value)); });
+  document.querySelectorAll('[data-register-link]').forEach(link => link.setAttribute('href', appHref(value) + '#/register'));
+  document.querySelectorAll('[data-home-link]').forEach(link => link.setAttribute('href', value === 'en' ? '/en/' : '/'));
   document.querySelectorAll('.brand').forEach(link => { link.setAttribute('href', value === 'en' ? '/en/' : '/'); });
   if (save) { try { localStorage.setItem(preferenceKey, value); } catch { /* The URL still carries the language into the application. */ } }
   if (updateUrl) {

@@ -7,3 +7,6 @@
 *.lock text eol=lf
 *.png binary
 *.ttf binary
+
+# Distributable Android release.
+*.apk binary

@@ -75,12 +75,21 @@ class RecoveryLimit(Base):
     attempts = Column(Integer, nullable=False)
 
 
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id = Column(String, primary_key=True, default=uid)
+    user_id = Column(ForeignKey("users.id"), nullable=False, index=True)
+    idle_expires = Column(UTCInstant, nullable=False)
+    last_activity = Column(UTCInstant, nullable=False, default=time.time)
+
+
 class Token(Base):
     __tablename__ = "tokens"
     digest = Column(String, primary_key=True)
     user_id = Column(ForeignKey("users.id"), nullable=False)
     kind = Column(String, nullable=False)
     expires = Column(UTCInstant, nullable=False)
+    auth_session_id = Column(ForeignKey("auth_sessions.id"), nullable=True, index=True)
 
 
 class Session(Base):

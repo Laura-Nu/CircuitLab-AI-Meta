@@ -107,3 +107,15 @@ test('Existing session links continue into the laboratory and preserve their ide
     assert.equal(new URLSearchParams(target.hash.slice(3)).get('session'), 'existing-session');
   }
 });
+
+
+test('Public signup, platform guidance and homepage links follow the selected language', async () => {
+  const page = await openPage();
+  assert.ok(page.document.getElementById('download'));
+  assert.equal(page.document.querySelector('[data-register-link]').getAttribute('href'), '/app/?lang=es#/register');
+  page.document.querySelector('[data-language="en"]').click();
+  assert.equal(page.document.querySelector('[data-register-link]').getAttribute('href'), '/app/?lang=en#/register');
+  for (const link of page.document.querySelectorAll('[data-home-link]')) assert.equal(link.getAttribute('href'), '/en/');
+  assert.ok(page.document.querySelector('#download').textContent.includes('same account'));
+  assert.ok(page.document.querySelector('#how-it-works').textContent.includes('remains unverified'));
+});

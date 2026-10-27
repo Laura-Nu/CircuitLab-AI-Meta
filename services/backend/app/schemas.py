@@ -9,10 +9,11 @@ class Strict(BaseModel):
 class Login(Strict):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=8, max_length=200)
+    client: Literal["native", "web"] = "native"
 
 
 class Refresh(Strict):
-    refresh_token: str = Field(min_length=20, max_length=200)
+    refresh_token: str | None = Field(default=None, min_length=20, max_length=200)
 
 
 class AccountEmail(Strict):
@@ -27,6 +28,11 @@ class AccountEmail(Strict):
         if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", value):
             raise ValueError("Invalid email")
         return value
+
+
+class AccountRegister(AccountEmail):
+    password: str = Field(min_length=12, max_length=200)
+    client: Literal["native", "web"] = "native"
 
 
 class AccountCreate(AccountEmail):
