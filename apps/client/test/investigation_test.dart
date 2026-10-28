@@ -135,8 +135,9 @@ Map<String, dynamic> fixture({bool complete = true}) => {
 Widget app(
   String language,
   Map<String, dynamic> session,
-  VoidCallback create,
-) => MaterialApp(
+  VoidCallback create, {
+  bool technicalDetails = true,
+}) => MaterialApp(
   locale: Locale(language),
   supportedLocales: const [Locale('en'), Locale('es')],
   localizationsDelegates: const [
@@ -158,6 +159,7 @@ Widget app(
         child: InvestigationPanels(
           session: session,
           busy: false,
+          technicalDetails: technicalDetails,
           onGenerate: create,
         ),
       ),
@@ -251,5 +253,47 @@ void main() {
       find.text(strings.t('storyNeedsCompletedDiagnosis')),
       findsOneWidget,
     );
+  });
+  for (final language in ['en', 'es']) {
+    testWidgets(
+      'Members retain evidence and predictions without model metadata in $language',
+      (tester) async {
+        final strings = AppStrings(language);
+        await tester.pumpWidget(
+          app(language, fixture(), () {}, technicalDetails: false),
+        );
+        await tester.pumpAndSettle();
+        final title = strings.t('diagnosticStepNumber', {'step': 1});
+        expect(find.text(title), findsOneWidget);
+        await tester.tap(find.text(title));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('muse-spark'), findsNothing);
+        expect(find.textContaining('muse-wonder'), findsNothing);
+        expect(find.textContaining('baseten'), findsNothing);
+        expect(find.textContaining('provider-request-123'), findsNothing);
+        expect(find.text(strings.t('storyDescriptionMember')), findsOneWidget);
+        expect(
+          find.text(
+            language == 'en' ? 'Low supply voltage' : 'Alimentación baja',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(strings.t('storySimulation')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
+  testWidgets('Unavailable story tools stay out of the member workflow', (
+    tester,
+  ) async {
+    final data = fixture(complete: false)
+      ..['storyboard_available'] = false
+      ..['storyboard_mode'] = 'disabled';
+    await tester.pumpWidget(app('en', data, () {}, technicalDetails: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Circuit Story'), findsNothing);
+    expect(find.text(AppStrings('en').t('createStory')), findsNothing);
   });
 }

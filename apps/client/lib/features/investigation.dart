@@ -6,11 +6,13 @@ import '../l10n/app_strings.dart';
 class InvestigationPanels extends StatelessWidget {
   final Map<String, dynamic> session;
   final bool busy;
+  final bool technicalDetails;
   final VoidCallback onGenerate;
   const InvestigationPanels({
     super.key,
     required this.session,
     required this.busy,
+    this.technicalDetails = false,
     required this.onGenerate,
   });
 
@@ -63,10 +65,18 @@ class InvestigationPanels extends StatelessWidget {
                         return ExpansionTile(
                           tilePadding: EdgeInsets.zero,
                           title: Text(
-                            '${index + 1}. ${run['model'] ?? strings.t('analysisErrorTitle')}',
+                            technicalDetails
+                                ? '${index + 1}. ${run['model'] ?? strings.t('analysisErrorTitle')}'
+                                : strings.t('diagnosticStepNumber', {
+                                    'step': index + 1,
+                                  }),
                           ),
                           subtitle: Text(
-                            '${run['provider'] ?? ''} · ${output['point_id'] ?? output['action'] ?? run['error'] ?? ''}',
+                            technicalDetails
+                                ? '${run['provider'] ?? ''} · ${output['point_id'] ?? output['action'] ?? run['error'] ?? ''}'
+                                : output['point_id'] != null
+                                ? '${strings.t('point')}: ${output['point_id']}'
+                                : strings.t('agentTraceDescription'),
                           ),
                           childrenPadding: const EdgeInsets.only(bottom: 16),
                           expandedCrossAxisAlignment: CrossAxisAlignment.start,
@@ -103,15 +113,17 @@ class InvestigationPanels extends StatelessWidget {
                                 },
                               ),
                             ],
-                            if (run['response_model'] != null)
+                            if (technicalDetails &&
+                                run['response_model'] != null)
                               Text(
                                 '${strings.t('reportedModel')}: ${run['response_model']}',
                               ),
-                            if (run['request_id'] != null)
+                            if (technicalDetails && run['request_id'] != null)
                               SelectableText(
                                 '${strings.t('providerRequest')}: ${run['request_id']}',
                               ),
-                            if (run['provider'] != 'simulation')
+                            if (technicalDetails &&
+                                run['provider'] != 'simulation')
                               Text(
                                 strings.t('providerIdentityNotice'),
                                 style: Theme.of(context).textTheme.bodySmall,
@@ -126,169 +138,181 @@ class InvestigationPanels extends StatelessWidget {
           ),
           const SizedBox(height: 18),
         ],
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Circuit Story',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    if (canGenerate &&
-                        (data == null || latest?['stale'] == true))
-                      FilledButton.icon(
-                        onPressed: busy || generating ? null : onGenerate,
-                        icon: const Icon(Icons.auto_stories_outlined),
-                        label: Text(
-                          strings.t(
-                            latest?['status'] == 'failed'
-                                ? 'retryStory'
-                                : 'createStory',
+        if (technicalDetails ||
+            session['storyboard_available'] == true ||
+            latest != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Circuit Story',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      if (canGenerate &&
+                          (data == null || latest?['stale'] == true))
+                        FilledButton.icon(
+                          onPressed: busy || generating ? null : onGenerate,
+                          icon: const Icon(Icons.auto_stories_outlined),
+                          label: Text(
+                            strings.t(
+                              latest?['status'] == 'failed'
+                                  ? 'retryStory'
+                                  : 'createStory',
+                            ),
                           ),
                         ),
-                      ),
-                    if (data != null)
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(
-                              text: const JsonEncoder.withIndent(
-                                '  ',
-                              ).convert(data),
-                            ),
-                          );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(strings.t('storyCopied'))),
+                      if (data != null && technicalDetails)
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(
+                                text: const JsonEncoder.withIndent(
+                                  '  ',
+                                ).convert(data),
+                              ),
                             );
-                          }
-                        },
-                        icon: const Icon(Icons.copy_outlined),
-                        label: Text(strings.t('copyStory')),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  strings.t(
-                    session['storyboard_mode'] == 'simulation'
-                        ? 'storyPreviewDescription'
-                        : 'storyDescription',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (!terminal) Text(strings.t('storyNeedsCompletedDiagnosis')),
-                if (terminal && !canGenerate && data == null)
-                  Text(strings.t('storyUnavailable')),
-                if (generating) ...[
-                  const LinearProgressIndicator(),
-                  const SizedBox(height: 8),
-                  Text(strings.t('storyGenerating')),
-                ],
-                if (latest?['status'] == 'failed')
-                  Text(strings.t('storyFailed')),
-                if (data != null) ...[
-                  if (latest?['stale'] == true) Text(strings.t('storyStale')),
-                  if (data['simulation'] == true ||
-                      data['diagnosis_mode'] == 'simulation')
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.amber.shade700),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.science_outlined),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(strings.t('storySimulation'))),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  Text(
-                    text(data['title']),
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    text(data['notice']),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth >= 720
-                          ? (constraints.maxWidth - 16) / 2
-                          : constraints.maxWidth;
-                      return Wrap(
-                        spacing: 16,
-                        runSpacing: 16,
-                        children: [
-                          for (var i = 0; i < frames.length; i++)
-                            SizedBox(
-                              width: width,
-                              child: Container(
-                                padding: const EdgeInsets.all(18),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: .35),
-                                  ),
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: .045),
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(strings.t('storyCopied')),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 18,
-                                      child: Text('${i + 1}'),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.copy_outlined),
+                          label: Text(strings.t('copyStory')),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    strings.t(
+                      session['storyboard_mode'] == 'simulation'
+                          ? 'storyPreviewDescription'
+                          : technicalDetails
+                          ? 'storyDescription'
+                          : 'storyDescriptionMember',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (!terminal)
+                    Text(strings.t('storyNeedsCompletedDiagnosis')),
+                  if (terminal && !canGenerate && data == null)
+                    Text(strings.t('storyUnavailable')),
+                  if (generating) ...[
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 8),
+                    Text(strings.t('storyGenerating')),
+                  ],
+                  if (latest?['status'] == 'failed')
+                    Text(strings.t('storyFailed')),
+                  if (data != null) ...[
+                    if (latest?['stale'] == true) Text(strings.t('storyStale')),
+                    if (data['simulation'] == true ||
+                        data['diagnosis_mode'] == 'simulation')
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.amber.shade700),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.science_outlined),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(strings.t('storySimulation'))),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      text(data['title']),
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      text(data['notice']),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth >= 720
+                            ? (constraints.maxWidth - 16) / 2
+                            : constraints.maxWidth;
+                        return Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: [
+                            for (var i = 0; i < frames.length; i++)
+                              SizedBox(
+                                width: width,
+                                child: Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: .35),
                                     ),
-                                    const SizedBox(height: 14),
-                                    Text(
-                                      text(frames[i]['headline']),
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(text(frames[i]['caption'])),
-                                    const SizedBox(height: 12),
-                                    for (final id in frames[i]['source_ids'])
-                                      if (facts[id] != null)
-                                        _RecordedFact(fact: facts[id]!),
-                                  ],
+                                    color: Theme.of(context).colorScheme.primary
+                                        .withValues(alpha: .045),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 18,
+                                        child: Text('${i + 1}'),
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Text(
+                                        text(frames[i]['headline']),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(text(frames[i]['caption'])),
+                                      const SizedBox(height: 12),
+                                      for (final id in frames[i]['source_ids'])
+                                        if (facts[id] != null)
+                                          _RecordedFact(fact: facts[id]!),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    '${data['audit']?['provider']} · ${data['audit']?['model']}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  SelectableText(
-                    '${strings.t('sourceFingerprint')}: ${data['source_sha256']}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                          ],
+                        );
+                      },
+                    ),
+                    if (technicalDetails) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        '${data['audit']?['provider']} · ${data['audit']?['model']}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      SelectableText(
+                        '${strings.t('sourceFingerprint')}: ${data['source_sha256']}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }

@@ -625,7 +625,7 @@ def report(
     result["storyboards"] = stories.stories_for(db, session)
     if format == "markdown":
         return Response(
-            render_markdown(result, language),
+            render_markdown(result, language, technical_details=user.role == 'admin'),
             media_type="text/markdown",
             headers={"Content-Language": language},
         )

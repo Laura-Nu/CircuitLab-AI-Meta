@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +15,8 @@ import 'accounts.dart';
 import 'investigation.dart';
 import 'metrics.dart';
 import 'functional_check.dart';
+import 'specification_dialog.dart';
+import 'analysis_status.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
 
@@ -63,6 +64,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   bool passwordVisible = false, confirmationVisible = false;
   String? error;
   bool busy = false, restoring = true, refreshing = false;
+  bool analysisRequested = false;
   int pending = 0;
   Timer? timer;
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -230,6 +232,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                       Spacer(),
                       LanguageSelector(),
                       if (mode.isNotEmpty &&
+                          (api.isAdmin || mode == 'simulation') &&
                           MediaQuery.sizeOf(context).width >= 680)
                         badge(
                           mode == 'simulation'
@@ -917,6 +920,16 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     final editable = s['can_edit'] == true;
     final plan = s['pending_test'] as Map?;
     final measurements = s['measurements'] as List;
+    final analysisJobs = (s['jobs'] as List? ?? [])
+        .where(
+          (job) =>
+              job['kind'] == 'analysis' &&
+              ['pending', 'running'].contains(job['status']),
+        )
+        .toList();
+    final currentJob = analysisJobs.isEmpty ? null : analysisJobs.last;
+    final analyzing =
+        analysisRequested || state == 'analyzing' || currentJob != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -962,7 +975,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               ),
             if (editable && ['ready', 'awaiting_evidence'].contains(state))
               FilledButton.icon(
-                onPressed: busy ? null : () => post('analysis'),
+                onPressed: busy ? null : requestAnalysis,
                 icon: Icon(Icons.auto_awesome, size: 17),
                 label: Text(tr('analyzeEvidence')),
               ),
@@ -983,14 +996,24 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               icon: Icon(Icons.article_outlined, size: 17),
               label: Text(tr('readableReport')),
             ),
-            OutlinedButton.icon(
-              onPressed: showReport,
-              icon: Icon(Icons.description_outlined, size: 17),
-              label: Text(tr('jsonReport')),
-            ),
+            if (api.isAdmin)
+              OutlinedButton.icon(
+                onPressed: showReport,
+                icon: Icon(Icons.description_outlined, size: 17),
+                label: Text(tr('jsonReport')),
+              ),
           ],
         ),
         SizedBox(height: 24),
+        if (analyzing) ...[
+          AnalysisStatusBanner(
+            status: analysisRequested
+                ? 'submitting'
+                : currentJob?['status'] ?? 'running',
+            attempts: (currentJob?['attempts'] as num?)?.toInt() ?? 1,
+          ),
+          const SizedBox(height: 18),
+        ],
         Text(
           tr('originalContent'),
           style: TextStyle(color: muted, fontSize: 11),
@@ -1137,6 +1160,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                   children: [
                     for (final e in s['evidence'])
                       EvidenceThumbnail(
+                        key: ValueKey('${s['id']}:${e['id']}'),
                         api: api,
                         sessionId: s['id'],
                         evidence: e,
@@ -1327,6 +1351,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         InvestigationPanels(
           session: s,
           busy: busy,
+          technicalDetails: api.isAdmin,
           onGenerate: () => post('storyboards'),
         ),
       ],
@@ -1506,107 +1531,36 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     }
   }
 
+  Future<void> requestAnalysis() async {
+    setState(() => analysisRequested = true);
+    try {
+      await post('analysis');
+    } finally {
+      if (mounted) setState(() => analysisRequested = false);
+    }
+  }
+
   Future<void> editSpec() async {
-    final s = selected!;
-    final current = s['specification'];
-    final connections = TextEditingController(
-      text: (current['connections'] as List?)?.join('\n') ?? '',
-    );
-    final description = TextEditingController(
-      text: current['functional_description'] ?? '',
-    );
-    final points =
-        (current['points'] as List?) ??
-        [
-          {'id': 'TP1', 'label': '', 'min_v': '', 'max_v': ''},
-        ];
-    final rows = List.generate(
-      3,
-      (i) => List.generate(
-        3,
-        (j) => TextEditingController(
-          text: i < points.length
-              ? '${points[i][['label', 'min_v', 'max_v'][j]]}'
-              : '',
-        ),
+    final session = selected!;
+    final specification = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => SpecificationDialog(
+        specification: Map<String, dynamic>.from(session['specification']),
+        supplyVoltage: (session['supply_v'] as num).toDouble(),
       ),
     );
-    final accepted = await dialog(
-      tr('schematicAndInitialCriteria'),
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            tr('physicallyConfirmTheConnectionsDefineTheRangesThat'),
-            style: TextStyle(color: muted),
-          ),
-          SizedBox(height: 18),
-          field(connections, tr('confirmedConnectionsOnePerLine'), lines: 4),
-          SizedBox(height: 18),
-          field(description, tr('functionalTestCondition'), lines: 3),
-          SizedBox(height: 18),
-          for (var i = 0; i < 3; i++)
-            Padding(
-              padding: EdgeInsets.only(bottom: 14),
-              child: Row(
-                children: [
-                  Text('TP${i + 1}'),
-                  SizedBox(width: 10),
-                  Expanded(flex: 2, child: field(rows[i][0], tr('label'))),
-                  SizedBox(width: 8),
-                  Expanded(child: field(rows[i][1], tr('minV'), numeric: true)),
-                  SizedBox(width: 8),
-                  Expanded(child: field(rows[i][2], tr('maxV'), numeric: true)),
-                ],
-              ),
-            ),
-          Text(
-            tr('leaveUnusedPointsEmptyAllDefinedPointsWill'),
-            style: TextStyle(color: muted, fontSize: 12),
-          ),
-        ],
-      ),
-      tr('iConfirmTheSchematicAndCriteria'),
-    );
-    if (accepted == true) {
-      await action(() async {
-        await api.request(
-          '/sessions/${s['id']}/specification',
-          method: 'PATCH',
-          data: {
-            'version': s['version'],
-            'confirmed': true,
-            'connections': connections.text
-                .split('\n')
-                .where((x) => x.trim().isNotEmpty)
-                .toList(),
-            'functional_description': description.text,
-            'points': [
-              for (var i = 0; i < 3; i++)
-                if (rows[i][0].text.trim().isNotEmpty)
-                  {
-                    'id': 'TP${i + 1}',
-                    'label': rows[i][0].text,
-                    'min_v': double.tryParse(
-                      rows[i][1].text.replaceAll(',', '.'),
-                    ),
-                    'max_v': double.tryParse(
-                      rows[i][2].text.replaceAll(',', '.'),
-                    ),
-                  },
-            ],
-          },
-        );
-      });
-    }
-    connections.dispose();
-    description.dispose();
-    for (final row in rows) {
-      for (final c in row) {
-        c.dispose();
-      }
-    }
+    if (specification == null || !mounted) return;
+    await action(() async {
+      await api.request(
+        '/sessions/${session['id']}/specification',
+        method: 'PATCH',
+        data: {
+          ...specification,
+          'version': session['version'],
+          'confirmed': true,
+        },
+      );
+    });
   }
 
   Future<void> measure() async {
@@ -1769,10 +1723,23 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     }
     String device = devices.first['id'];
     final s = selected!;
-    final points = s['specification']['points'] as List;
-    String point = s['state'] == 'awaiting_measurement'
+    final points = (s['specification']['points'] as List)
+        .where(
+          (p) => devices.any((d) => (d['points'] as List).contains(p['id'])),
+        )
+        .toList();
+    final requested = s['state'] == 'awaiting_measurement'
         ? s['pending_test']['point_id']
-        : points.first['id'];
+        : null;
+    if (points.isEmpty ||
+        (requested != null && !points.any((p) => p['id'] == requested))) {
+      toast(tr('bridgePointUnavailable'));
+      return;
+    }
+    String point = requested ?? points.first['id'];
+    List<dynamic> compatibleDevices() =>
+        devices.where((d) => (d['points'] as List).contains(point)).toList();
+    device = compatibleDevices().first['id'];
     bool confirmed = false;
     final accepted = await dialog(
       tr('readInstrumentedPoint'),
@@ -1784,7 +1751,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               initialValue: device,
               decoration: InputDecoration(labelText: 'Bridge'),
               items: [
-                for (final d in devices)
+                for (final d in compatibleDevices())
                   DropdownMenuItem(
                     value: d['id'] as String,
                     child: Text(
@@ -1807,7 +1774,12 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               ],
               onChanged: s['state'] == 'awaiting_measurement'
                   ? null
-                  : (v) => update(() => point = v!),
+                  : (v) => update(() {
+                      point = v!;
+                      if (!compatibleDevices().any((d) => d['id'] == device)) {
+                        device = compatibleDevices().first['id'];
+                      }
+                    }),
             ),
             SizedBox(height: 12),
             CheckboxListTile(
@@ -2083,29 +2055,43 @@ class EvidenceThumbnail extends StatefulWidget {
 
 class _EvidenceThumbnailState extends State<EvidenceThumbnail> {
   String tr(String key) => AppStrings.of(context).t(key);
-  late final Future<Response<List<int>>> image = widget.api.dio.get<List<int>>(
-    '/sessions/${widget.sessionId}/evidence/${widget.evidence['id']}',
-    options: Options(
-      responseType: ResponseType.bytes,
-      headers: {'Authorization': 'Bearer ${widget.api.access}'},
-    ),
+  late Future<Uint8List> image = loadImage();
+  Future<Uint8List> loadImage() => widget.api.downloadEvidence(
+    widget.sessionId,
+    widget.evidence['id'] as String,
   );
+
+  @override
+  void didUpdateWidget(covariant EvidenceThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.api != widget.api ||
+        oldWidget.sessionId != widget.sessionId ||
+        oldWidget.evidence['id'] != widget.evidence['id']) {
+      image = loadImage();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 190,
     height: 150,
     child: ClipRRect(
       borderRadius: BorderRadius.circular(9),
-      child: FutureBuilder(
+      child: FutureBuilder<Uint8List>(
         future: image,
         builder: (_, snap) {
-          if (snap.hasError) {
-            return Center(child: Text(tr('unableToLoad')));
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
           }
-          if (!snap.hasData) {
-            return Center(child: CircularProgressIndicator());
+          if (snap.hasError || !snap.hasData) {
+            return Center(
+              child: TextButton(
+                onPressed: () => setState(() => image = loadImage()),
+                child: Text('${tr('unableToLoad')} · ${tr('retry')}'),
+              ),
+            );
           }
-          final bytes = Uint8List.fromList(snap.data!.data!);
+          final bytes = snap.data!;
           return InkWell(
             onTap: () => showDialog<void>(
               context: context,

@@ -64,7 +64,7 @@ def prepare_report(result, language):
     return result
 
 
-def render_markdown(report, language):
+def render_markdown(report, language, *, technical_details=False):
     def text(es, en):
         return en if language == "en" else es
 
@@ -80,7 +80,7 @@ def render_markdown(report, language):
         f"{text('Familia', 'Family')}: {label(report['family'], language)}",
         f"{text('Modo', 'Mode')}: {'SIMULATION' if language == 'en' else 'SIMULACIÓN'}"
         if report["diagnosis_mode"] == "simulation"
-        else "Meta",
+        else text("Diagnóstico asistido", "Assisted diagnosis") if not technical_details else "Meta",
         f"{text('Alimentación', 'Supply')}: {report['supply_v']} V",
         "",
         report["presentation"]["original_content_notice"],
@@ -112,17 +112,29 @@ def render_markdown(report, language):
         )
         lines.append("  " + safe_text(localized_text(data, "explanation", language)))
         lines.append(f"  {text('Referencias', 'References')}: {', '.join(data.get('evidence_ids', []))}")
-    lines += ["", f"## {text('Ejecuciones del modelo', 'Model executions')}"]
-    for run in report["model_runs"]:
-        data = run["data"]
-        lines.append(f"- {run['id']} · {safe_text(data.get('provider', ''))} · {safe_text(data.get('model', ''))}")
-        if data.get("response_model"):
-            lines.append(f"  {text('Modelo reportado', 'Reported model')}: {safe_text(data['response_model'])}")
-        if data.get("request_id"):
-            lines.append(f"  {text('Solicitud al proveedor', 'Provider request')}: {safe_text(data['request_id'])}")
-        for prediction in data.get("output", {}).get("test_predictions", []):
-            outcome = prediction["expected_outcome"][language]
-            lines.append(f"  H{prediction['hypothesis_index'] + 1}: {safe_text(outcome)}")
+    if technical_details:
+        lines += ["", f"## {text('Ejecuciones del modelo', 'Model executions')}"]
+        for run in report["model_runs"]:
+            data = run["data"]
+            lines.append(f"- {run['id']} · {safe_text(data.get('provider', ''))} · {safe_text(data.get('model', ''))}")
+            if data.get("response_model"):
+                lines.append(f"  {text('Modelo reportado', 'Reported model')}: {safe_text(data['response_model'])}")
+            if data.get("request_id"):
+                lines.append(f"  {text('Solicitud al proveedor', 'Provider request')}: {safe_text(data['request_id'])}")
+            for prediction in data.get("output", {}).get("test_predictions", []):
+                outcome = prediction["expected_outcome"][language]
+                lines.append(f"  H{prediction['hypothesis_index'] + 1}: {safe_text(outcome)}")
+    else:
+        lines += ["", f"## {text('Comprobaciones propuestas', 'Proposed checks')}"]
+        for run in report["model_runs"]:
+            output = run["data"].get("output", {})
+            for field in ("instruction", "rationale"):
+                value = localized_text(output, field, language)
+                if value:
+                    lines.append("- " + safe_text(value))
+            for prediction in output.get("test_predictions", []):
+                outcome = prediction["expected_outcome"][language]
+                lines.append(f"  H{prediction['hypothesis_index'] + 1}: {safe_text(outcome)}")
     lines += ["", f"## {text('Mediciones', 'Measurements')}"]
     for item in report["measurements"]:
         phase = (

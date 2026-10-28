@@ -195,28 +195,49 @@ class CircuitApi extends ChangeNotifier {
     String method = 'GET',
     dynamic data,
   }) async {
+    return (await _authenticatedRequest<dynamic>(
+      path,
+      method: method,
+      data: data,
+    )).data;
+  }
+
+  Future<Uint8List> downloadEvidence(
+    String sessionId,
+    String evidenceId,
+  ) async {
+    final response = await _authenticatedRequest<List<int>>(
+      '/sessions/$sessionId/evidence/$evidenceId',
+      responseType: ResponseType.bytes,
+    );
+    // Reuse one buffer across rebuilds so MemoryImage keeps its cache key.
+    return Uint8List.fromList(response.data!);
+  }
+
+  Future<Response<T>> _authenticatedRequest<T>(
+    String path, {
+    String method = 'GET',
+    dynamic data,
+    ResponseType? responseType,
+  }) async {
+    final requestAccess = access;
+    Future<Response<T>> send() => dio.request<T>(
+      path,
+      data: data,
+      options: Options(
+        method: method,
+        responseType: responseType,
+        headers: {'Authorization': 'Bearer $access'},
+      ),
+    );
     try {
-      return (await dio.request(
-        path,
-        data: data,
-        options: Options(
-          method: method,
-          headers: {'Authorization': 'Bearer $access'},
-        ),
-      )).data;
+      return await send();
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401 && canRenew) {
-        await renew();
-        return (await dio.request(
-          path,
-          data: data,
-          options: Options(
-            method: method,
-            headers: {'Authorization': 'Bearer $access'},
-          ),
-        )).data;
-      }
-      rethrow;
+      if (e.response?.statusCode != 401 || !canRenew) rethrow;
+      // A concurrent request may have already replaced this expired token.
+      if (access == requestAccess) await renew();
+      if (!signedIn) rethrow;
+      return send();
     }
   }
 

@@ -211,6 +211,17 @@ not authenticate this endpoint. The local launcher can provide a labeled simulat
 
 ## Hardware
 
+Investigations support 1–8 authorized test points. The bilingual specification editor
+adds and removes point rows without renaming the remaining points; criteria freeze
+when analysis starts. Manual readings can use every authorized point. Bridge readings
+only offer points supported by an enrolled device; the reference firmware below still
+maps three inputs. More investigation points do not add physical acquisition channels.
+
+Evidence thumbnails retain their byte buffers during background status updates and
+use the authenticated renewal path for downloads. A rejected refresh credential still
+requires signing in again; it is never bypassed.
+
+
 The reference instrument uses an Arduino UNO with **TP1 -> A0, TP2 -> A1,
 TP3 -> A2** and confirmed common GND. Firmware accepts JSON commands at 115200 baud
 and averages 1-100 ADC samples. Supported measurements are DC voltages within the
@@ -267,6 +278,13 @@ the result source matches the device's enrollment mode.
    Record any physical intervention only after it was performed. Functional
    verification requires fresh post-intervention readings at every specified point;
    simulated readings cannot establish `physical_verification: true`.
+
+Analysis sessions display a persistent indeterminate progress indicator while a job
+is queued, running or awaiting a retry. No percentage or completion time is fabricated.
+Members retain diagnostic hypotheses and test predictions, while model/provider names
+and request receipts are shown in the administrator interface. The ordinary readable
+report omits that technical execution section. Simulation provenance remains visible.
+An unavailable Circuit Story feature is not advertised in the member workspace.
 
 ## Administrator metrics
 
