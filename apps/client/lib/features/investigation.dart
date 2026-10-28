@@ -59,6 +59,13 @@ class InvestigationPanels extends StatelessWidget {
                       builder: (context) {
                         final run = trace[index] as Map;
                         final output = run['output'] as Map? ?? {};
+                        // Older reports can contain the literal string "null".
+                        final rawPoint = output['point_id']?.toString().trim();
+                        final point =
+                            rawPoint != null &&
+                                RegExp(r'^TP[1-9][0-9]?$').hasMatch(rawPoint)
+                            ? rawPoint
+                            : null;
                         final hypotheses = output['hypotheses'] as List? ?? [];
                         final translations =
                             (output['translations'] as Map?)?[language] as Map?;
@@ -73,9 +80,9 @@ class InvestigationPanels extends StatelessWidget {
                           ),
                           subtitle: Text(
                             technicalDetails
-                                ? '${run['provider'] ?? ''} · ${output['point_id'] ?? output['action'] ?? run['error'] ?? ''}'
-                                : output['point_id'] != null
-                                ? '${strings.t('point')}: ${output['point_id']}'
+                                ? '${run['provider'] ?? ''} · ${point ?? output['action'] ?? run['error'] ?? ''}'
+                                : point != null
+                                ? '${strings.t('point')}: $point'
                                 : strings.t('agentTraceDescription'),
                           ),
                           childrenPadding: const EdgeInsets.only(bottom: 16),

@@ -129,7 +129,10 @@ async def translated_internal_error(request: Request, exc: Exception):
 
 @app.get(prefix + "/health/live")
 def live():
+    from app.release import deployment_metadata
+
     return {
+        **deployment_metadata(),
         "status": "ok",
         "ai_mode": settings().ai_mode,
         "provider_configured": bool(settings().meta_api_key and settings().meta_reasoning_model),

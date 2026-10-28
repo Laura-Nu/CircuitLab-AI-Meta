@@ -15,10 +15,17 @@ from app.operations import operational_status, reserve_budget, validate_runtime
 
 
 def inspect_environment():
+    from app.main import app
+    from app.release import deployment_metadata
+
     config = settings()
     checks = {
         "production_environment": config.app_env == "production",
         "real_inference_mode": config.ai_mode == "meta",
+        "functional_check_route": any(
+            route.path == "/api/v1/sessions/{session_id}/functional-check"
+            and "POST" in getattr(route, "methods", set()) for route in app.routes
+        ),
     }
     try:
         validate_runtime()
@@ -30,6 +37,7 @@ def inspect_environment():
         checks["provider_configuration"] = False
     report = {
         "checks": checks,
+        "deployment": deployment_metadata(),
         "model": config.meta_reasoning_model or None,
         "provider": config.meta_provider,
     }
@@ -165,10 +173,16 @@ def main():
         "--probe-meta", action="store_true", help="Make three real provider requests; consumes model tokens"
     )
     parser.add_argument("--email-receipt", help="Retrieve an existing Resend receipt; never sends email")
+    parser.add_argument("--expect-build-revision", help="Require the running API to match a deployed Git revision")
     args = parser.parse_args()
     if args.probe_meta and not args.session_id:
         parser.error("--probe-meta requires --session-id with an uploaded circuit image")
     report = inspect_environment()
+    if args.expect_build_revision:
+        report["checks"]["expected_build_revision"] = (
+            report["deployment"]["build_revision"] == args.expect_build_revision
+            and args.expect_build_revision != "unknown"
+        )
     try:
         if args.session_id:
             report["investigation"] = session_status(args.session_id)

@@ -4,6 +4,8 @@ x-backend: &backend
   build:
     context: ..
     dockerfile: infra/docker/backend.Dockerfile
+    args:
+      CIRCUITLAB_BUILD_REVISION: ${CIRCUITLAB_BUILD_REVISION:-unknown}
   env_file: ../.env
   volumes:
     - evidence:/data/evidence

@@ -540,6 +540,56 @@ The script does not install Docker, modify Nginx, obtain certificates, stop othe
 projects or issue global PM2 commands. Existing Nginx configuration must be reviewed
 separately. No remote server changes are made by configuration preparation.
 
+### Update an existing installation
+
+A frontend build alone does not update the API or worker. Keep the existing
+production `.env`, database password, evidence volume and Compose project name.
+Commit and push the reviewed changes first, then run inside `/var/www/circuitlab`:
+
+```bash
+git status --short
+git pull --ff-only
+cd apps/client
+flutter pub get --enforce-lockfile
+flutter build web --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1
+cd ../..
+python3 scripts/build_site.py
+python3 scripts/deploy_vps.py --check
+python3 scripts/deploy_vps.py --apply
+curl --fail --silent --show-error https://circuitlab.doc-ia.cloud/api/v1/health/live
+curl --fail --silent --show-error https://circuitlab.doc-ia.cloud/api/v1/health/ready
+```
+
+Review any local Git changes before pulling. The deployment helper builds the
+backend with the checked-out Git revision, backs up the database before migration,
+applies current migrations, and recreates only this project's API and worker.
+It verifies both containers use the newly built image, then checks the running API's
+revision, migration, functional-check route and operational readiness. A failed
+check stops the script without claiming the deployment succeeded; inspect only
+CircuitLab's private logs to resolve it.
+
+The public health response must include `api_contract_version: "2"`, capabilities
+`functional_checks` and `role_aware_reports`, and the deployed Git revision as
+`build_revision`. A response missing these fields is insufficient to confirm this
+update, even when the web interface reports the current version.
+
+Before the bench test, check a member's English and Spanish readable exports:
+provider/model execution details should be absent. Test an actual intervention
+only after it is performed, record fresh readings and the functional observation,
+and then request verification. A passing voltage alone is insufficient.
+
+Version 0.1.5/build 6 includes anonymous-session restoration, legacy optional-point
+normalization and a new-investigation action for inconclusive sessions. Starting
+a follow-up does not reopen the old record or copy measurements and confirmations.
+
+Divider reasoning treats declared supply as nominal until measured. Analytical
+counterexamples accompany the model context and observation tool: a low output
+can result from an incorrect ratio or low input. The model must compare actual
+input/output before excluding supply variation. This guidance and software tests
+do not establish physical accuracy or guarantee every model response is correct.
+Existing model responses remain in the audit trail; the updated rules apply to
+subsequent analyses.
+
 ### Activate the domain through the existing Nginx
 
 1. Point the DNS record for `circuitlab.doc-ia.cloud` at the VPS. Check that no existing site owns that

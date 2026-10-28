@@ -314,4 +314,54 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets(
+    'An inconclusive investigation offers a new session without reopening it',
+    (tester) async {
+      final strings = AppStrings('es');
+      final session = <String, dynamic>{
+        'id': 'test-session',
+        'title': 'Closed investigation',
+        'family': 'voltage_divider',
+        'supply_v': 5,
+        'state': 'inconclusive',
+        'spec_version': 1,
+        'analysis_steps': 1,
+        'expected': 'Stable output',
+        'symptoms': 'Not enough evidence',
+        'can_edit': true,
+        'pending_test': null,
+        'specification': {'points': []},
+        'measurements': [],
+        'evidence': [],
+        'hypotheses': [],
+        'verifications': [],
+      };
+      final api = TestApi(authenticated: true, fixture: session);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [apiProvider.overrideWithValue(api)],
+          child: const CircuitLabApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.textContaining('Closed investigation').first,
+      );
+      await tester.tap(find.textContaining('Closed investigation').first);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(strings.t('inconclusiveFollowUpNotice')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text(strings.t('startFollowUpSession')));
+      await tester.tap(find.text(strings.t('startFollowUpSession')));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.t('createSession')), findsOneWidget);
+      expect(session['state'], 'inconclusive');
+      expect(session['measurements'], isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

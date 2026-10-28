@@ -214,9 +214,18 @@ class DiagnosisOutput(Strict):
         "propose_intervention",
         "inconclusive",
     ]
-    point_id: str | None = None
+    point_id: str | None = Field(default=None, pattern=r"^TP[1-9][0-9]?$", max_length=4)
     instruction: str = Field(min_length=5, max_length=2000)
     rationale: str = Field(min_length=5, max_length=2000)
+
+    @field_validator("point_id", mode="before")
+    @classmethod
+    def optional_point(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            if value.casefold() in {"", "null", "none", "undefined", "n/a"}:
+                return None
+        return value
 
     @model_validator(mode="after")
     def translation_alignment(self):

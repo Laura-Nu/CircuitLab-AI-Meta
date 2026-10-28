@@ -296,4 +296,28 @@ void main() {
     expect(find.text('Circuit Story'), findsNothing);
     expect(find.text(AppStrings('en').t('createStory')), findsNothing);
   });
+
+  for (final language in ['en', 'es']) {
+    testWidgets(
+      'Legacy null point does not appear in the member trace: $language',
+      (tester) async {
+        final session = fixture(complete: false);
+        (session['agent_trace'][0]['output'] as Map)['point_id'] = 'null';
+        (session['agent_trace'][0]['output'] as Map)['action'] = 'inconclusive';
+        await tester.pumpWidget(
+          app(language, session, () {}, technicalDetails: false),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining(': null'), findsNothing);
+        expect(
+          find.text(
+            AppStrings(language).t('diagnosticStepNumber', {'step': 1}),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 }

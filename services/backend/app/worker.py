@@ -96,9 +96,11 @@ def validate_plan(output, context):
             hypothesis.evidence_ids
         ):
             raise ValueError("Hipótesis respaldada sin medida")
-    if output.action in {"read_voltage", "request_manual_measurement"}:
-        if output.point_id not in {p["id"] for p in context["specification"]["points"]}:
-            raise ValueError("Punto solicitado fuera del esquema autorizado")
+    allowed_points = {p["id"] for p in context["specification"]["points"]}
+    if output.point_id is not None and output.point_id not in allowed_points:
+        raise ValueError("Punto solicitado fuera del esquema autorizado")
+    if output.action in {"read_voltage", "request_manual_measurement"} and output.point_id is None:
+        raise ValueError("Una medición requiere un punto autorizado")
     if output.action == "propose_intervention" and not any(
         measurements.intersection(h.evidence_ids) for h in output.hypotheses
     ):

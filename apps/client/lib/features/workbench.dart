@@ -979,6 +979,12 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                 icon: Icon(Icons.auto_awesome, size: 17),
                 label: Text(tr('analyzeEvidence')),
               ),
+            if (editable && state == 'inconclusive')
+              OutlinedButton.icon(
+                onPressed: busy ? null : createSession,
+                icon: Icon(Icons.add),
+                label: Text(tr('startFollowUpSession')),
+              ),
             if (editable && state == 'awaiting_confirmation')
               FilledButton.icon(
                 onPressed: busy ? null : confirmConnection,
@@ -1005,6 +1011,13 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           ],
         ),
         SizedBox(height: 24),
+        if (state == 'inconclusive') ...[
+          Text(
+            tr('inconclusiveFollowUpNotice'),
+            style: TextStyle(color: muted),
+          ),
+          SizedBox(height: 18),
+        ],
         if (analyzing) ...[
           AnalysisStatusBanner(
             status: analysisRequested

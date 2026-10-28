@@ -102,6 +102,21 @@ def existing_project(env):
     return rows
 
 
+def verify_runtime_images(env, compose, process_env):
+    expected = run(["docker", "image", "inspect", "--format", "{{.Id}}", env["CIRCUITLAB_IMAGE"]],
+                   text=True, env=process_env).stdout.strip()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected):
+        raise DeploymentError("Could not identify the built CircuitLab image")
+    for service in ("api", "worker"):
+        container = run(compose + ["ps", "-q", service], text=True, env=process_env).stdout.strip()
+        if not container or len(container.splitlines()) != 1:
+            raise DeploymentError("Expected one running CircuitLab " + service + " container")
+        actual = run(["docker", "inspect", "--format", "{{.Image}}", container],
+                     text=True, env=process_env).stdout.strip()
+        if actual != expected:
+            raise DeploymentError("CircuitLab " + service + " is using an outdated image; deployment not verified")
+
+
 def apply(env, compose):
     if os.name != "posix" or str(ROOT) != env["SITE_ROOT"]:
         raise DeploymentError("Apply must run on Linux from the configured dedicated project directory")
@@ -118,7 +133,10 @@ def apply(env, compose):
                 listener.bind(("127.0.0.1", int(env["API_BIND_PORT"])))
             except OSError:
                 raise DeploymentError("The API port is occupied; choose another port without stopping its owner") from None
-    process_env = {**os.environ, **env}
+    revision = run(["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD"], text=True).stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise DeploymentError("Could not identify the CircuitLab Git revision")
+    process_env = {**os.environ, **env, "CIRCUITLAB_BUILD_REVISION": revision}
     run(compose + ["config", "--quiet"], text=True, env=process_env)
     run(compose + ["build", "migrate"], text=True, env=process_env)
     run(compose + ["up", "-d", "--wait", "postgres"], text=True, env=process_env)
@@ -132,7 +150,12 @@ def apply(env, compose):
     if result.returncode or backup.stat().st_size == 0:
         raise DeploymentError("Database backup failed; migrations were not run")
     run(compose + ["run", "--rm", "--no-deps", "-T", "migrate"], text=True, env=process_env)
-    run(compose + ["up", "-d", "--wait", "--no-deps", "api", "worker"], text=True, env=process_env)
+    run(compose + ["up", "-d", "--wait", "--no-deps", "--force-recreate", "api", "worker"],
+        text=True, env=process_env)
+    verify_runtime_images(env, compose, process_env)
+    run(compose + ["exec", "-T", "api", "python", "-m", "app.production_check",
+                   "--expect-build-revision", revision], text=True, env=process_env)
+    print("CircuitLab API and worker revision verified: " + revision)
     print("CircuitLab containers deployed. Nginx and other projects were not modified. Database backup: " + str(backup))
 
 

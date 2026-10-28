@@ -353,7 +353,7 @@ const localizedMessages = <String, Map<String, String>>{
     "alreadyHaveAccount": "Already have an account? Sign in",
     "passwordsMustMatch": "The passwords must match.",
     "downloadAndroid": "Download for Android",
-    "sessionExpiredIdle": "Your session expired after four hours of inactivity. Sign in again to continue.",
+    "sessionExpiredIdle": "Your session expired or is no longer valid. Sign in again to continue.",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "recordFunctionalTest": "Record functional test",
@@ -406,7 +406,9 @@ const localizedMessages = <String, Map<String, String>>{
     "analysisRetrying": "Retrying the analysis",
     "analysisProgressNotice": "We are reviewing the evidence and recorded readings. This view updates automatically; you do not need to submit the request again.",
     "diagnosticStepNumber": "Diagnostic step {step}",
-    "storyDescriptionMember": "Turn this investigation into a visual story linked to its recorded evidence, in English or Spanish."
+    "storyDescriptionMember": "Turn this investigation into a visual story linked to its recorded evidence, in English or Spanish.",
+    "startFollowUpSession": "Start a new investigation",
+    "inconclusiveFollowUpNotice": "This investigation ended without a conclusion. To add new evidence or readings, start a new session and confirm its connections and criteria."
   },
   "es": {
     "connectionConfirmed": "Conexión confirmada",
@@ -761,7 +763,7 @@ const localizedMessages = <String, Map<String, String>>{
     "alreadyHaveAccount": "¿Ya tienes cuenta? Inicia sesión",
     "passwordsMustMatch": "Las contraseñas deben coincidir.",
     "downloadAndroid": "Descargar para Android",
-    "sessionExpiredIdle": "Tu sesión venció tras cuatro horas de inactividad. Inicia sesión para continuar.",
+    "sessionExpiredIdle": "Tu sesión venció o dejó de ser válida. Inicia sesión para continuar.",
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "recordFunctionalTest": "Registrar prueba funcional",
@@ -814,6 +816,8 @@ const localizedMessages = <String, Map<String, String>>{
     "analysisRetrying": "Reintentando el análisis",
     "analysisProgressNotice": "Estamos revisando la evidencia y las lecturas registradas. Esta vista se actualiza automáticamente; no necesitas volver a enviar la solicitud.",
     "diagnosticStepNumber": "Paso de diagnóstico {step}",
-    "storyDescriptionMember": "Convierte esta investigación en una historia visual vinculada a sus evidencias, en español o inglés."
+    "storyDescriptionMember": "Convierte esta investigación en una historia visual vinculada a sus evidencias, en español o inglés.",
+    "startFollowUpSession": "Iniciar una nueva investigación",
+    "inconclusiveFollowUpNotice": "Esta investigación terminó sin una conclusión. Para agregar evidencia o lecturas, crea una nueva sesión y confirma sus conexiones y criterios."
   }
 };

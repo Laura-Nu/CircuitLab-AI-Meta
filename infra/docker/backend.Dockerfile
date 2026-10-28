@@ -7,6 +7,8 @@ COPY services/backend/app ./app
 COPY services/backend/migrations ./migrations
 COPY services/backend/alembic.ini ./
 RUN useradd --create-home --uid 10001 circuitlab && mkdir -p /data/evidence && chown -R circuitlab:circuitlab /data /app
+ARG CIRCUITLAB_BUILD_REVISION=unknown
+ENV CIRCUITLAB_BUILD_REVISION=$CIRCUITLAB_BUILD_REVISION
 USER circuitlab
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000

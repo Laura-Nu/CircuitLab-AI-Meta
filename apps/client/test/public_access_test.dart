@@ -240,4 +240,36 @@ void main() {
       expect(await api.secure.read(key: 'refresh'), isNull);
     },
   );
+
+  for (final state in ['anonymous', 'authenticated', 'native restoration']) {
+    test(
+      'Rejected refresh preserves the correct session notice: $state',
+      () async {
+        final api = CircuitApi(store: web.Outbox());
+        if (state == 'authenticated') api.access = 'old-access';
+        if (state == 'native restoration') api.refresh = 'old-refresh';
+        api.dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response(requestOptions: options, statusCode: 401),
+                  type: DioExceptionType.badResponse,
+                ),
+              );
+            },
+          ),
+        );
+        await expectLater(api.renew(), throwsA(isA<DioException>()));
+        expect(api.signedIn, isFalse);
+        expect(api.refresh, isNull);
+        expect(api.sessionExpired, state != 'anonymous');
+        // Repeated anonymous restoration must not erase a real expiration notice.
+        await expectLater(api.renew(), throwsA(isA<DioException>()));
+        expect(api.sessionExpired, state != 'anonymous');
+        api.dispose();
+      },
+    );
+  }
 }

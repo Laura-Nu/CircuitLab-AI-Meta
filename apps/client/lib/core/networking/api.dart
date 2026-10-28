@@ -178,6 +178,10 @@ class CircuitApi extends ChangeNotifier {
       _renewing ??= _doRenew().whenComplete(() => _renewing = null);
 
   Future<void> _doRenew() async {
+    // A fresh browser also probes its HttpOnly refresh cookie. A rejected probe
+    // does not establish that an authenticated session previously existed.
+    final establishedSession =
+        signedIn || refresh != null || idleDeadline != null || sessionExpired;
     try {
       final response = await dio.post(
         '/auth/refresh',
@@ -185,7 +189,9 @@ class CircuitApi extends ChangeNotifier {
       );
       await accept(response.data);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) await clearCredentials(expired: true);
+      if (e.response?.statusCode == 401) {
+        await clearCredentials(expired: establishedSession);
+      }
       rethrow;
     }
   }

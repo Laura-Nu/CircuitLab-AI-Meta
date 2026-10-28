@@ -59,3 +59,26 @@ def test_deploy_refuses_a_compose_project_owned_by_another_directory(monkeypatch
     with pytest.raises(RuntimeError, match="different directory"):
         deploy_vps.existing_project({"CIRCUITLAB_PROJECT_NAME": "circuitlab", "CIRCUITLAB_IMAGE": "circuitlab-vps-backend:0.1.0"})
     assert all("up" not in call and "stop" not in call and "rm" not in call for call in calls)
+
+@pytest.mark.parametrize("stale_service", [None, "api", "worker"])
+def test_deployment_verifies_both_running_image_ids(monkeypatch, stale_service):
+    current, stale = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        if args[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(stdout=current)
+        if "ps" in args:
+            return SimpleNamespace(stdout="container-" + args[-1])
+        service = args[-1].removeprefix("container-")
+        return SimpleNamespace(stdout=stale if service == stale_service else current)
+
+    monkeypatch.setattr(deploy_vps, "run", run)
+    env = {"CIRCUITLAB_IMAGE": "circuitlab-vps-backend:test"}
+    if stale_service:
+        with pytest.raises(deploy_vps.DeploymentError, match=stale_service + " is using an outdated image"):
+            deploy_vps.verify_runtime_images(env, ["docker", "compose"], {})
+    else:
+        deploy_vps.verify_runtime_images(env, ["docker", "compose"], {})
+        assert sum("{{.Image}}" in call for call in calls) == 2

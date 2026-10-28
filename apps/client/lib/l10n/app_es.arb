@@ -352,7 +352,7 @@
   "alreadyHaveAccount": "¿Ya tienes cuenta? Inicia sesión",
   "passwordsMustMatch": "Las contraseñas deben coincidir.",
   "downloadAndroid": "Descargar para Android",
-  "sessionExpiredIdle": "Tu sesión venció tras cuatro horas de inactividad. Inicia sesión para continuar.",
+  "sessionExpiredIdle": "Tu sesión venció o dejó de ser válida. Inicia sesión para continuar.",
   "showPassword": "Mostrar contraseña",
   "hidePassword": "Ocultar contraseña",
   "recordFunctionalTest": "Registrar prueba funcional",
@@ -405,5 +405,7 @@
   "analysisRetrying": "Reintentando el análisis",
   "analysisProgressNotice": "Estamos revisando la evidencia y las lecturas registradas. Esta vista se actualiza automáticamente; no necesitas volver a enviar la solicitud.",
   "diagnosticStepNumber": "Paso de diagnóstico {step}",
-  "storyDescriptionMember": "Convierte esta investigación en una historia visual vinculada a sus evidencias, en español o inglés."
+  "storyDescriptionMember": "Convierte esta investigación en una historia visual vinculada a sus evidencias, en español o inglés.",
+  "startFollowUpSession": "Iniciar una nueva investigación",
+  "inconclusiveFollowUpNotice": "Esta investigación terminó sin una conclusión. Para agregar evidencia o lecturas, crea una nueva sesión y confirma sus conexiones y criterios."
 }

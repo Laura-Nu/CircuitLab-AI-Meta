@@ -46,7 +46,10 @@ def test_meta_uses_validated_tool_output_and_keeps_provider_audit(monkeypatch):
             })
         messages = kwargs["json"]["messages"]
         assert messages[-1]["role"] == "tool" and messages[-1]["tool_call_id"] == "read-1"
-        assert json.loads(messages[-1]["content"])["specification"]["points"][0]["id"] == "TP1"
+        observations = json.loads(messages[-1]["content"])
+        assert observations["specification"]["points"][0]["id"] == "TP1"
+        assert observations["reasoning_constraints"]["nominal_values_are_not_measurements"]
+        assert observations["measurements"] == []
         return httpx.Response(
             200,
             request=httpx.Request("POST", url),
