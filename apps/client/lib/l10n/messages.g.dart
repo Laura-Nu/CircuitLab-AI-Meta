@@ -534,7 +534,16 @@ const localizedMessages = <String, Map<String, String>>{
     "usbResult_disconnected": "The instrument disconnected; no value was recorded.",
     "usbResult_out_of_range": "The reading or instrument response is outside the supported limits.",
     "usbResult_precondition_failed": "The requested channel or instrument command is not compatible.",
-    "usbInstrument": "Instrument"
+    "usbInstrument": "Instrument",
+    "usbChoosingPort": "Choose a port in Chrome’s window, then click Connect there. To stop, cancel that window.",
+    "usbOpeningPort": "Port selected. Opening the USB connection…",
+    "usbStartingInstrument": "USB port opened. Waiting for the instrument to start…",
+    "usbRegisteringServer": "USB opened. Connecting this instrument to your CircuitLab account…",
+    "usbCancelled": "Connection cancelled. Select the port and confirm with Connect in Chrome’s window.",
+    "usbOpenTimeout": "The USB port did not finish opening. Close Arduino Serial Monitor and other programs using it, reconnect the USB cable and try again.",
+    "usbServerTimeout": "The USB port opened, but CircuitLab did not respond in time. Check the network and try connecting again.",
+    "usbTabHidden": "Keep the CircuitLab tab visible to finish connecting, then try again.",
+    "usbCancelConnect": "Cancel connection"
   },
   "es": {
     "connectionConfirmed": "Conexión confirmada",
@@ -1070,6 +1079,15 @@ const localizedMessages = <String, Map<String, String>>{
     "usbResult_disconnected": "El instrumento se desconectó; no se registró ningún valor.",
     "usbResult_out_of_range": "La lectura o respuesta del instrumento está fuera de los límites admitidos.",
     "usbResult_precondition_failed": "El canal solicitado o el comando no son compatibles con el instrumento.",
-    "usbInstrument": "Instrumento"
+    "usbInstrument": "Instrumento",
+    "usbChoosingPort": "Elige el puerto en la ventana de Chrome y pulsa Conectar allí. Para detenerte, cancela esa ventana.",
+    "usbOpeningPort": "Puerto seleccionado. Abriendo la conexión USB…",
+    "usbStartingInstrument": "Puerto USB abierto. Esperando a que inicie el instrumento…",
+    "usbRegisteringServer": "USB abierto. Conectando este instrumento con tu cuenta de CircuitLab…",
+    "usbCancelled": "Conexión cancelada. Selecciona el puerto y confirma con Conectar en la ventana de Chrome.",
+    "usbOpenTimeout": "El puerto USB no terminó de abrirse. Cierra el monitor serie de Arduino y otros programas que lo usen, vuelve a conectar el cable USB e inténtalo otra vez.",
+    "usbServerTimeout": "El puerto USB se abrió, pero CircuitLab no respondió a tiempo. Revisa la red e intenta conectar otra vez.",
+    "usbTabHidden": "Mantén visible la pestaña de CircuitLab para completar la conexión e inténtalo otra vez.",
+    "usbCancelConnect": "Cancelar conexión"
   }
 };

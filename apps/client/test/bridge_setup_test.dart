@@ -42,4 +42,46 @@ void main() {
       }
     }
   }
+  for (final language in ['en', 'es']) {
+    testWidgets(
+      'Inline port-opening and failure feedback stays readable at 320 px in $language',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final strings = AppStrings(language);
+        for (final key in [
+          'usbChoosingPort',
+          'usbOpeningPort',
+          'usbStartingInstrument',
+          'usbOpenTimeout',
+          'usbCancelled',
+        ]) {
+          final busy = !['usbOpenTimeout', 'usbCancelled'].contains(key);
+          await tester.pumpWidget(
+            shell(
+              language,
+              Scaffold(
+                body: SingleChildScrollView(
+                  child: UsbConnectionStatus(
+                    message: strings.t(key),
+                    busy: busy,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(find.text(strings.t(key)), findsOneWidget);
+          expect(
+            find.byType(CircularProgressIndicator),
+            busy ? findsOneWidget : findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+        }
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 }

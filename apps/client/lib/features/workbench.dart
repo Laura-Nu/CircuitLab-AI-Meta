@@ -1672,21 +1672,32 @@ class _WorkbenchState extends ConsumerState<Workbench>
                   FilledButton.icon(
                     onPressed:
                         !usb.supported ||
-                            usb.connecting ||
+                            (usb.connecting &&
+                                usb.attemptedDeviceId != d['id']) ||
                             (usb.active && usb.deviceId != d['id'])
                         ? null
-                        : () => usb.deviceId == d['id']
-                              ? usb.disconnect()
+                        : () => usb.deviceId == d['id'] || usb.connecting
+                              ? usb.disconnect(
+                                  reason: usb.connecting ? 'cancelled' : 'idle',
+                                )
                               : usb.connect(d),
                     icon: const Icon(Icons.usb),
                     label: Text(
                       tr(
-                        usb.deviceId == d['id']
+                        usb.connecting && usb.attemptedDeviceId == d['id']
+                            ? 'usbCancelConnect'
+                            : usb.deviceId == d['id']
                             ? 'usbDisconnect'
                             : 'usbConnect',
                       ),
                     ),
                   ),
+                  if (usb.attemptedDeviceId == d['id'])
+                    UsbConnectionStatus(
+                      key: ValueKey('usb-status-${d['id']}'),
+                      message: usbStatus(),
+                      busy: usb.connecting || usb.state == 'reading',
+                    ),
                   if (usb.lastResult.isNotEmpty && usb.deviceId == d['id'])
                     Text(tr('usbResult_${usb.lastResult}')),
                 ],
@@ -2284,6 +2295,14 @@ class _WorkbenchState extends ConsumerState<Workbench>
       'expired': 'usbExpired',
       'backend_update': 'usbBackendUpdate',
       'signed_out': 'usbSignedOut',
+      'choosing_port': 'usbChoosingPort',
+      'opening_port': 'usbOpeningPort',
+      'starting_instrument': 'usbStartingInstrument',
+      'registering_server': 'usbRegisteringServer',
+      'cancelled': 'usbCancelled',
+      'open_timeout': 'usbOpenTimeout',
+      'server_timeout': 'usbServerTimeout',
+      'tab_hidden': 'usbTabHidden',
     };
     return tr(states[usb.state] ?? 'usbConnectionError');
   }

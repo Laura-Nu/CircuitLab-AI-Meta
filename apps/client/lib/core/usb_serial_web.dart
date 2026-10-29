@@ -10,12 +10,19 @@ extension type _SerialApi._(JSObject _) implements JSObject {
   external JSPromise<JSAny?> disconnect();
   external JSPromise<JSString> read(JSString command, JSString points);
   external set onDisconnect(JSFunction? callback);
+  external set onState(JSFunction? callback);
 }
 
 class UsbSerialPort {
   bool get supported => _serial.supported;
   set onDisconnect(void Function()? callback) {
     _serial.onDisconnect = callback?.toJS;
+  }
+
+  set onState(void Function(String)? callback) {
+    _serial.onState = callback == null
+        ? null
+        : ((JSString stage) => callback(stage.toDart)).toJS;
   }
 
   Future<Map<String, dynamic>> connect() async => Map<String, dynamic>.from(

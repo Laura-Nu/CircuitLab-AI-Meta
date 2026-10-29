@@ -533,5 +533,14 @@
   "usbResult_disconnected": "The instrument disconnected; no value was recorded.",
   "usbResult_out_of_range": "The reading or instrument response is outside the supported limits.",
   "usbResult_precondition_failed": "The requested channel or instrument command is not compatible.",
-  "usbInstrument": "Instrument"
+  "usbInstrument": "Instrument",
+  "usbChoosingPort": "Choose a port in Chrome’s window, then click Connect there. To stop, cancel that window.",
+  "usbOpeningPort": "Port selected. Opening the USB connection…",
+  "usbStartingInstrument": "USB port opened. Waiting for the instrument to start…",
+  "usbRegisteringServer": "USB opened. Connecting this instrument to your CircuitLab account…",
+  "usbCancelled": "Connection cancelled. Select the port and confirm with Connect in Chrome’s window.",
+  "usbOpenTimeout": "The USB port did not finish opening. Close Arduino Serial Monitor and other programs using it, reconnect the USB cable and try again.",
+  "usbServerTimeout": "The USB port opened, but CircuitLab did not respond in time. Check the network and try connecting again.",
+  "usbTabHidden": "Keep the CircuitLab tab visible to finish connecting, then try again.",
+  "usbCancelConnect": "Cancel connection"
 }

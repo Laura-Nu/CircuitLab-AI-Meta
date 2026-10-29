@@ -94,6 +94,36 @@ class UsbApi extends TestApi {
   }
 }
 
+class OpeningSerial extends FixtureSerial {
+  void Function(String)? stageCallback;
+  final opening = Completer<Map<String, dynamic>>();
+  @override
+  set onState(void Function(String)? callback) {
+    stageCallback = callback;
+  }
+
+  @override
+  Future<Map<String, dynamic>> connect() {
+    opens++;
+    stageCallback?.call('opening_port');
+    return opening.future;
+  }
+}
+
+class DelayedClaimApi extends UsbApi {
+  final firstClaim = Completer<dynamic>();
+  bool first = true;
+  @override
+  Future<dynamic> request(String path, {String method = 'GET', dynamic data}) {
+    if (path.endsWith('/browser/connect') && first) {
+      first = false;
+      calls.add(path);
+      return firstClaim.future;
+    }
+    return super.request(path, method: method, data: data);
+  }
+}
+
 Future<void> settle() async {
   for (var i = 0; i < 8; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -186,4 +216,75 @@ void main() {
     await settle();
     api.dispose();
   });
+  test(
+    'A selected port reports opening and a terminal timeout without calling the server',
+    () async {
+      final api = UsbApi(), serial = OpeningSerial();
+      final usb = BrowserUsbController(api, serial: serial);
+      final attempt = usb.connect({'id': 'fixture'});
+      expect(usb.state, 'opening_port');
+      expect(usb.connecting, isTrue);
+      expect(usb.attemptedDeviceId, 'fixture');
+      serial.opening.complete({'status': 'open_timeout'});
+      await attempt;
+      expect(usb.state, 'open_timeout');
+      expect(usb.connecting, isFalse);
+      expect(api.calls, isEmpty);
+      expect(api.signedIn, isTrue);
+      usb.dispose();
+      await settle();
+      api.dispose();
+    },
+  );
+  test(
+    'Cancelling the chooser remains visible instead of returning to idle',
+    () async {
+      final api = UsbApi(), serial = OpeningSerial();
+      final usb = BrowserUsbController(api, serial: serial);
+      final attempt = usb.connect({'id': 'fixture'});
+      serial.opening.complete({'status': 'cancelled'});
+      await attempt;
+      expect(usb.state, 'cancelled');
+      expect(api.calls, isEmpty);
+      usb.dispose();
+      await settle();
+      api.dispose();
+    },
+  );
+  for (final failOld in [false, true]) {
+    test(
+      'A late cancelled server claim cannot close a newer USB connection, failure=$failOld',
+      () async {
+        final api = DelayedClaimApi()..delivered = true,
+            serial = FixtureSerial();
+        final usb = BrowserUsbController(api, serial: serial);
+        final oldAttempt = usb.connect({'id': 'fixture'});
+        await settle();
+        expect(usb.state, 'registering_server');
+        await usb.disconnect(reason: 'cancelled');
+        await usb.connect({'id': 'new-device'});
+        await settle();
+        expect(usb.deviceId, 'new-device');
+        expect(serial.closes, 1);
+        if (failOld) {
+          api.firstClaim.completeError(
+            DioException(requestOptions: RequestOptions(path: 'fixture')),
+          );
+        } else {
+          api.firstClaim.complete({
+            'lease': 'SYNTHETIC-old-claim',
+            'points': ['TP1'],
+            'calibration_id': 'fixture',
+          });
+        }
+        await oldAttempt;
+        await settle();
+        expect(usb.deviceId, 'new-device');
+        expect(serial.closes, 1);
+        usb.dispose();
+        await settle();
+        api.dispose();
+      },
+    );
+  }
 }

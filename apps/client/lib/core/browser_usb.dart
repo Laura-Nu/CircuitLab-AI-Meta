@@ -9,7 +9,7 @@ class BrowserUsbController extends ChangeNotifier {
   final CircuitApi api;
   final UsbSerialPort port;
   String state = 'idle', lastResult = '';
-  String? deviceId, _lease;
+  String? deviceId, attemptedDeviceId, _lease;
   List<dynamic> _points = [];
   String _calibration = '';
   Timer? _timer;
@@ -20,11 +20,28 @@ class BrowserUsbController extends ChangeNotifier {
   BrowserUsbController(this.api, {UsbSerialPort? serial})
     : port = serial ?? UsbSerialPort() {
     port.onDisconnect = () => unawaited(disconnect(reason: 'disconnected'));
+    port.onState = (stage) {
+      if (connecting &&
+          const {
+            'choosing_port',
+            'opening_port',
+            'starting_instrument',
+          }.contains(stage)) {
+        state = stage;
+        _changed();
+      }
+    };
     api.addListener(_authChanged);
   }
   bool get supported => port.supported;
   bool get active => deviceId != null;
-  bool get connecting => state == 'connecting';
+  bool get connecting => const {
+    'connecting',
+    'choosing_port',
+    'opening_port',
+    'starting_instrument',
+    'registering_server',
+  }.contains(state);
   void _changed() {
     if (!_disposed) notifyListeners();
   }
@@ -36,29 +53,29 @@ class BrowserUsbController extends ChangeNotifier {
   Future<void> connect(Map device) async {
     if (_disposed || active || connecting || !api.signedIn) return;
     final generation = ++_generation;
-    state = 'connecting';
+    attemptedDeviceId = device['id'];
+    state = 'choosing_port';
     lastResult = '';
     _changed();
     try {
       // The permission prompt starts here, before the first awaited server operation.
       final opened = await port.connect();
-      if (generation != _generation || !api.signedIn) {
-        await port.disconnect();
+      if (generation != _generation) return;
+      if (!api.signedIn) {
+        await disconnect(reason: 'signed_out');
         return;
       }
       if (opened['status'] != 'connected') {
-        state = opened['status'] == 'cancelled'
-            ? 'idle'
-            : opened['status'] as String;
+        state = opened['status'] as String;
         _changed();
         return;
       }
-      final response = await api.request(
-        '/devices/${device['id']}/browser/connect',
-        method: 'POST',
-      );
+      state = 'registering_server';
+      _changed();
+      final response = await api
+          .request('/devices/${device['id']}/browser/connect', method: 'POST')
+          .timeout(const Duration(seconds: 12));
       if (generation != _generation || !api.signedIn) {
-        await port.disconnect();
         unawaited(
           api
               .request(
@@ -79,11 +96,12 @@ class BrowserUsbController extends ChangeNotifier {
       _timer = Timer.periodic(const Duration(seconds: 2), (_) => poll());
       unawaited(poll());
     } catch (error) {
-      await disconnect(reason: _reason(error));
+      if (generation == _generation) await disconnect(reason: _reason(error));
     }
   }
 
   String _reason(Object error) {
+    if (error is TimeoutException) return 'server_timeout';
     if (error is DioException) {
       if (error.response?.statusCode == 401) return 'signed_out';
       final code = error.response?.data is Map
@@ -190,6 +208,7 @@ class BrowserUsbController extends ChangeNotifier {
     _disposed = true;
     api.removeListener(_authChanged);
     port.onDisconnect = null;
+    port.onState = null;
     unawaited(disconnect());
     super.dispose();
   }

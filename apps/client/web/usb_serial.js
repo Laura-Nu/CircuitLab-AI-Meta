@@ -4,40 +4,73 @@
   let port = null, reader = null, writer = null, reading = null, pending = null;
   let buffer = "", closing = null;
   const seen = new Map();
+  const openingPorts = new Set();
+  let generation = 0, starting = null;
   const api = {
     get supported() { return !!(globalThis.isSecureContext && navigator.serial?.requestPort); },
     onDisconnect: null,
+    onState: null,
     async connect() {
       if (!api.supported) return JSON.stringify({status: "unsupported"});
-      if (port || closing) return JSON.stringify({status: "busy"});
+      if (port || closing || starting !== null || openingPorts.size) return JSON.stringify({status: "busy"});
+      const attempt = ++generation;
+      starting = attempt;
       let selected;
       try {
-        // Must be invoked directly by the user's Connect button, before any API request.
+        stage("choosing_port");
+        // No awaited operation before the browser's user-activated port chooser.
         selected = await navigator.serial.requestPort();
-        await selected.open({baudRate: 115200, bufferSize: 4096});
+        if (generation !== attempt) return JSON.stringify({status: "cancelled"});
+        stage("opening_port");
+        openingPorts.add(selected);
+        let opened;
+        try { opened = Promise.resolve(selected.open({baudRate: 115200, bufferSize: 4096})); }
+        catch (error) { openingPorts.delete(selected); throw error; }
+        // A driver operation cannot be cancelled. Close it if it succeeds after cancellation/timeout.
+        void opened.then(async () => {
+          if (generation !== attempt) {
+            try { await bounded(Promise.resolve(selected.close()), 1500, "cleanup_timeout"); } catch (_) {}
+          }
+          openingPorts.delete(selected);
+        }, () => openingPorts.delete(selected));
+        await bounded(opened, 10000, "open_timeout");
+        if (generation !== attempt) return JSON.stringify({status: "cancelled"});
         port = selected; buffer = ""; seen.clear();
-        reader = port.readable.getReader();
-        reading = readLoop(reader, selected);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // UNO resets when opening USB.
-        if (port !== selected) return JSON.stringify({status: "disconnected"});
+        if (!port.readable || !port.writable) throw {code: "port_unavailable"};
+        stage("starting_instrument");
+        reading = readLoop(selected, attempt);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (generation !== attempt || port !== selected) return JSON.stringify({status: "disconnected"});
+        if (document.hidden) {
+          await api.disconnect();
+          return JSON.stringify({status: "tab_hidden"});
+        }
         buffer = "";
         return JSON.stringify({status: "connected"});
       } catch (error) {
+        if (generation === attempt) ++generation;
         if (selected && selected === port) await api.disconnect();
-        return JSON.stringify({status: error?.name === "NotFoundError" ? "cancelled"
-          : error?.name === "SecurityError" ? "permission_denied" : "port_unavailable"});
+        const status = error?.code === "open_timeout" ? "open_timeout"
+          : error?.name === "NotFoundError" ? "cancelled"
+          : ["SecurityError", "NotAllowedError"].includes(error?.name) ? "permission_denied"
+          : "port_unavailable";
+        return JSON.stringify({status});
+      } finally {
+        if (starting === attempt) starting = null;
       }
     },
     async disconnect() {
+      ++generation;
+      starting = null;
       if (closing) return closing;
       const previous = port, previousReader = reader, previousWriter = writer;
       port = null; reader = null; writer = null;
       settle({status: "disconnected", sample_count: 0});
       closing = (async () => {
-        try { await previousReader?.cancel(); } catch (_) {}
-        try { await previousWriter?.abort(); } catch (_) {}
-        try { await reading; } catch (_) {}
-        try { await previous?.close(); } catch (_) {}
+        try { await bounded(Promise.resolve(previousReader?.cancel()), 1500, "cleanup_timeout"); } catch (_) {}
+        try { await bounded(Promise.resolve(previousWriter?.abort()), 1500, "cleanup_timeout"); } catch (_) {}
+        try { await bounded(Promise.resolve(reading), 1500, "cleanup_timeout"); } catch (_) {}
+        try { await bounded(Promise.resolve(previous?.close()), 1500, "cleanup_timeout"); } catch (_) {}
         reading = null; buffer = ""; seen.clear();
       })();
       try { await closing; } finally { closing = null; }
@@ -101,36 +134,64 @@
     }
     settle({status: "ok", value: result.value, sample_count: result.sample_count});
   }
-  async function readLoop(input, selected) {
+  function stage(value) {
+    try { api.onState?.(value); } catch (_) {}
+  }
+  function bounded(operation, milliseconds, code) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject({code}), milliseconds);
+      operation.then(value => { clearTimeout(timeout); resolve(value); },
+        error => { clearTimeout(timeout); reject(error); });
+    });
+  }
+  async function readLoop(selected, attempt) {
     const decoder = new TextDecoder();
-    try {
-      while (port === selected) {
-        const {value, done} = await input.read();
-        if (done) break;
-        buffer += decoder.decode(value, {stream: true});
-        if (buffer.length > 8192) {
-          buffer = ""; settle({status: "out_of_range", sample_count: 0}); continue;
+    let recoveries = 0;
+    while (generation === attempt && port === selected && selected.readable) {
+      const stream = selected.readable;
+      let input, recover = false;
+      try {
+        input = stream.getReader();
+        reader = input;
+        while (generation === attempt && port === selected) {
+          const {value, done} = await input.read();
+          if (generation !== attempt || port !== selected) break;
+          if (done) break;
+          buffer += decoder.decode(value, {stream: true});
+          if (buffer.length > 8192) {
+            buffer = ""; settle({status: "out_of_range", sample_count: 0}); continue;
+          }
+          let end;
+          while ((end = buffer.indexOf("\n")) >= 0) {
+            const raw = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+            if (raw.length <= 4096) line(raw);
+          }
         }
-        let end;
-        while ((end = buffer.indexOf("\n")) >= 0) {
-          const raw = buffer.slice(0, end); buffer = buffer.slice(end + 1);
-          if (raw.length <= 4096) line(raw);
+      } catch (_) {
+        // Web Serial replaces readable after recoverable framing/parity/overflow errors.
+        recover = generation === attempt && port === selected && !!selected.readable &&
+          selected.readable !== stream && ++recoveries <= 3;
+        if (generation === attempt) {
+          buffer = "";
+          settle({status: "out_of_range", sample_count: 0});
         }
+      } finally {
+        try { input?.releaseLock(); } catch (_) {}
+        if (reader === input) reader = null;
       }
-    } catch (_) { /* Port removal is reported through the same explicit disconnect path. */ }
-    finally {
-      try { input.releaseLock(); } catch (_) {}
-      if (port === selected) {
-        queueMicrotask(async () => {
-          await api.disconnect();
-          api.onDisconnect?.();
-        });
-      }
+      if (!recover) break;
+    }
+    if (generation === attempt && port === selected) {
+      queueMicrotask(async () => {
+        if (generation !== attempt || port !== selected) return;
+        await api.disconnect();
+        api.onDisconnect?.();
+      });
     }
   }
   globalThis.addEventListener("pagehide", () => { void api.disconnect(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && port) {
+    if (document.hidden && port && starting === null) {
       void api.disconnect().then(() => api.onDisconnect?.());
     }
   });

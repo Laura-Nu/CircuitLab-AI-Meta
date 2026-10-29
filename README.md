@@ -262,6 +262,15 @@ database audit trail. A successful connection is not a completed hardware check.
 Readings that time out, disconnect, or violate the protocol never become numeric
 measurements or physical verification.
 
+Connection progress appears next to the instrument button: choose/confirm the
+browser port, open USB, wait for board startup, then register the server connection.
+Driver opening is limited to 10 seconds; a server claim is limited to 12 seconds.
+Cancellation and failures remain visible. A late-opened or cancelled connection
+cannot attach itself or close a newer attempt. Recoverable serial read errors use
+the replacement readable stream; invalid data during a reading still fails that
+reading. No sample is invented to recover a connection.
+Web and Android release 0.1.12/build 13 include this connection feedback.
+
 Keep the connected tab visible. Hiding the tab, closing it, losing the USB port,
 signing out, or expiring the login stops acquisition. One short server connection
 lease permits a single tab at a time; another connection is rejected while it is

@@ -41,3 +41,36 @@ class BridgeSetupCard extends StatelessWidget {
     );
   }
 }
+
+/// Keep connection progress beside the clicked control, including on small screens.
+class UsbConnectionStatus extends StatelessWidget {
+  final String message;
+  final bool busy;
+  const UsbConnectionStatus({
+    super.key,
+    required this.message,
+    required this.busy,
+  });
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (busy)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(Icons.info_outline, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    ),
+  );
+}
