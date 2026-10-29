@@ -16,6 +16,7 @@ import '../core/measurement_points.dart';
 import '../core/browser_usb.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
+import 'account_identity.dart';
 import 'investigation.dart';
 import 'metrics.dart';
 import 'functional_check.dart';
@@ -131,7 +132,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
-    if (foreground && api.signedIn) refresh(silent: true);
+    if (foreground && api.signedIn) {
+      lastWorkspaceSync = null;
+      refresh(silent: true);
+    }
   }
 
   @override
@@ -400,22 +404,24 @@ class _WorkbenchState extends ConsumerState<Workbench>
                               ? Colors.amber
                               : mint,
                         ),
-                      SizedBox(width: wide ? 16 : 4),
-                      IconButton(
-                        tooltip: tr('sync'),
-                        onPressed: busy
-                            ? null
-                            : () => action(() => api.sync().then((_) {})),
-                        icon: Icon(Icons.sync, size: 20),
-                      ),
-                      CircleAvatar(
-                        radius: 17,
-                        backgroundColor: mint.withValues(alpha: .12),
-                        child: Text(
-                          api.email.isEmpty ? 'C' : api.email[0].toUpperCase(),
-                          style: TextStyle(color: mint, fontSize: 13),
+                      if (!kIsWeb) ...[
+                        SizedBox(width: wide ? 16 : 4),
+                        IconButton(
+                          tooltip: tr('sync'),
+                          onPressed: busy
+                              ? null
+                              : () => action(() => api.sync().then((_) {})),
+                          icon: Icon(Icons.sync, size: 20),
                         ),
-                      ),
+                        AccountIdentity(
+                          email: api.email,
+                          compact:
+                              MediaQuery.sizeOf(context).width < 680 ||
+                              (api.isAdmin &&
+                                  wide &&
+                                  MediaQuery.sizeOf(context).width < 1200),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -504,62 +510,35 @@ class _WorkbenchState extends ConsumerState<Workbench>
               height: 76,
               child: Align(alignment: Alignment.centerLeft, child: brand()),
             ),
-            SizedBox(height: 28),
-            Text(
-              tr('laboratory'),
-              style: TextStyle(color: muted, fontSize: 10, letterSpacing: 2),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 28),
+                    Text(
+                      tr('laboratory'),
+                      style: TextStyle(
+                        color: muted,
+                        fontSize: 10,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    SizedBox(height: 14),
+                    nav(Icons.grid_view_rounded, tr('mySessions'), 'sessions'),
+                    nav(Icons.usb_rounded, tr('devices'), 'devices'),
+                    if (api.isAdmin) ...[
+                      nav(Icons.insights_outlined, tr('metricsNav'), 'metrics'),
+                      nav(Icons.manage_accounts_outlined, tr('users'), 'users'),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            SizedBox(height: 14),
-            nav(Icons.grid_view_rounded, tr('mySessions'), 'sessions'),
-            nav(Icons.usb_rounded, tr('devices'), 'devices'),
-            if (api.isAdmin) ...[
-              nav(Icons.insights_outlined, tr('metricsNav'), 'metrics'),
-              nav(Icons.manage_accounts_outlined, tr('users'), 'users'),
+            if (kIsWeb) ...[
+              AccountIdentity(email: api.email, sidebar: true),
+              SizedBox(height: 8),
             ],
-            SizedBox(height: 28),
-            Divider(),
-            SizedBox(height: 20),
-            Text(
-              tr('aVerifiableCycle'),
-              style: TextStyle(fontSize: 10, letterSpacing: 1.4, color: muted),
-            ),
-            SizedBox(height: 16),
-            for (final item in [
-              tr('01Observe'),
-              tr('02Measure'),
-              tr('03Repair'),
-              tr('04Verify'),
-            ])
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(item, style: TextStyle(color: muted, fontSize: 12)),
-              ),
-            Spacer(),
-            Container(
-              padding: EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: mint.withValues(alpha: .05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: mint.withValues(alpha: .15)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.electrical_services, color: mint, size: 20),
-                  SizedBox(height: 10),
-                  Text(
-                    tr('lowVoltageLaboratory'),
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    tr('confirmedPointsHumanRepairs'),
-                    style: TextStyle(color: muted, fontSize: 11, height: 1.7),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 15),
             TextButton.icon(
               onPressed: busy
                   ? null
@@ -2320,6 +2299,16 @@ class _WorkbenchState extends ConsumerState<Workbench>
           field(name, tr('deviceName'), minLength: 2),
           const SizedBox(height: 16),
           field(calibration, tr('calibrationIdentifier'), minLength: 3),
+          const SizedBox(height: 10),
+          Text(
+            tr('calibrationIdentifierHelp'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            tr('calibrationNotPrepared'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
       tr('usbRegister'),

@@ -137,11 +137,13 @@ void main() {
       );
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       final beforeBackground = api.progressCalls;
+      final beforeBackgroundWorkspace = api.workspaceCalls;
       await tester.pump(const Duration(seconds: 12));
       expect(api.progressCalls, beforeBackground);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump(const Duration(milliseconds: 200));
       expect(api.progressCalls, greaterThan(beforeBackground));
+      expect(api.workspaceCalls, beforeBackgroundWorkspace + 1);
       await tester.pumpWidget(const SizedBox());
       expect(tester.takeException(), isNull);
     },

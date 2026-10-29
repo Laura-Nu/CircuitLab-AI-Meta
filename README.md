@@ -244,6 +244,18 @@ uv run python -m bridge.main
 
 ### Direct browser USB
 
+The browser workspace shows the signed-in account in the sidebar above Sign out.
+Session changes refresh automatically every four seconds while active; workspace
+lists use a slower polling interval to limit requests. Returning to the tab forces
+a fresh workspace read. Background refreshes do not extend the account's idle
+session. The native app retains its manual sync action for offline uploads.
+
+A calibration identifier is a reference to your own record of comparing the
+measuring instrument against a reference multimeter, for example
+`BENCH-01-CAL-001`. It is not a credential, automatic calibration or proof of
+accuracy. The application stores this reference; it does not certify the
+calibration. Use manual readings until the instrument has been checked.
+
 Under **Devices**, register a **USB instrument** with its calibration identifier,
 then click **Connect USB** and select its serial port in the browser permission
 dialog. No executable, Python installation, or manually copied bridge token is
@@ -269,7 +281,7 @@ Cancellation and failures remain visible. A late-opened or cancelled connection
 cannot attach itself or close a newer attempt. Recoverable serial read errors use
 the replacement readable stream; invalid data during a reading still fails that
 reading. No sample is invented to recover a connection.
-Web and Android release 0.1.12/build 13 include this connection feedback.
+Web and Android release 0.1.14/build 15 include this connection feedback.
 
 Keep the connected tab visible. Hiding the tab, closing it, losing the USB port,
 signing out, or expiring the login stops acquisition. One short server connection
@@ -285,7 +297,7 @@ desktop browser. Unsupported browsers display manual-reading guidance. Existing
 Python/WebSocket bridges remain compatible for prepared laboratory installations.
 
 Deploy database migration **0008** with the API before using the new client.
-Web and Android release **0.1.11/build 12** include this workflow. The Windows
+Web and Android release **0.1.14/build 15** include this workflow. The Windows
 executable is retired from the repository and public site packaging. Rebuilding
 the site removes only its three named legacy public download artifacts.
 

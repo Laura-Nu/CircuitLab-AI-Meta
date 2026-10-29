@@ -515,7 +515,7 @@ const localizedMessages = <String, Map<String, String>>{
     "usbConnect": "Connect USB",
     "usbDisconnect": "Disconnect USB",
     "usbReleaseTabs": "Release connection in other tabs",
-    "usbEnrollHint": "This registers the instrument in your account. Next, click Connect USB and choose the physical port. Use the calibration identifier of the prepared instrument.",
+    "usbEnrollHint": "This registers the measuring instrument in your account, not the board you will diagnose. Next, click Connect USB and choose the physical port.",
     "usbRegistered": "Instrument registered. Click Connect USB to select its port.",
     "usbIdle": "USB disconnected",
     "usbConnecting": "Opening USB port…",
@@ -543,7 +543,10 @@ const localizedMessages = <String, Map<String, String>>{
     "usbOpenTimeout": "The USB port did not finish opening. Close Arduino Serial Monitor and other programs using it, reconnect the USB cable and try again.",
     "usbServerTimeout": "The USB port opened, but CircuitLab did not respond in time. Check the network and try connecting again.",
     "usbTabHidden": "Keep the CircuitLab tab visible to finish connecting, then try again.",
-    "usbCancelConnect": "Cancel connection"
+    "usbCancelConnect": "Cancel connection",
+    "currentAccount": "Current account",
+    "calibrationIdentifierHelp": "Reference to the record where you compared this instrument against a multimeter. Example: BENCH-01-CAL-001. This is not a key and does not calibrate the board automatically.",
+    "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated."
   },
   "es": {
     "connectionConfirmed": "Conexión confirmada",
@@ -1060,7 +1063,7 @@ const localizedMessages = <String, Map<String, String>>{
     "usbConnect": "Conectar USB",
     "usbDisconnect": "Desconectar USB",
     "usbReleaseTabs": "Liberar conexión de otras pestañas",
-    "usbEnrollHint": "Esto registra el instrumento en tu cuenta. Después, pulsa Conectar USB y elige el puerto físico. Usa el identificador de calibración del instrumento preparado.",
+    "usbEnrollHint": "Esto registra el instrumento de medición en tu cuenta, no la placa que vas a analizar. Después, pulsa Conectar USB y elige el puerto físico.",
     "usbRegistered": "Instrumento registrado. Pulsa Conectar USB para seleccionar su puerto.",
     "usbIdle": "USB desconectado",
     "usbConnecting": "Abriendo puerto USB…",
@@ -1088,6 +1091,9 @@ const localizedMessages = <String, Map<String, String>>{
     "usbOpenTimeout": "El puerto USB no terminó de abrirse. Cierra el monitor serie de Arduino y otros programas que lo usen, vuelve a conectar el cable USB e inténtalo otra vez.",
     "usbServerTimeout": "El puerto USB se abrió, pero CircuitLab no respondió a tiempo. Revisa la red e intenta conectar otra vez.",
     "usbTabHidden": "Mantén visible la pestaña de CircuitLab para completar la conexión e inténtalo otra vez.",
-    "usbCancelConnect": "Cancelar conexión"
+    "usbCancelConnect": "Cancelar conexión",
+    "currentAccount": "Cuenta actual",
+    "calibrationIdentifierHelp": "Referencia del registro donde comparaste este instrumento con un multímetro. Ejemplo: BANCO-01-CAL-001. No es una clave ni calibra la placa automáticamente.",
+    "calibrationNotPrepared": "Si todavía no comprobaste el instrumento, usa mediciones manuales. Escribir una referencia aquí no demuestra que esté calibrado."
   }
 };

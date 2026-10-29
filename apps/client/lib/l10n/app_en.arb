@@ -514,7 +514,7 @@
   "usbConnect": "Connect USB",
   "usbDisconnect": "Disconnect USB",
   "usbReleaseTabs": "Release connection in other tabs",
-  "usbEnrollHint": "This registers the instrument in your account. Next, click Connect USB and choose the physical port. Use the calibration identifier of the prepared instrument.",
+  "usbEnrollHint": "This registers the measuring instrument in your account, not the board you will diagnose. Next, click Connect USB and choose the physical port.",
   "usbRegistered": "Instrument registered. Click Connect USB to select its port.",
   "usbIdle": "USB disconnected",
   "usbConnecting": "Opening USB port…",
@@ -542,5 +542,8 @@
   "usbOpenTimeout": "The USB port did not finish opening. Close Arduino Serial Monitor and other programs using it, reconnect the USB cable and try again.",
   "usbServerTimeout": "The USB port opened, but CircuitLab did not respond in time. Check the network and try connecting again.",
   "usbTabHidden": "Keep the CircuitLab tab visible to finish connecting, then try again.",
-  "usbCancelConnect": "Cancel connection"
+  "usbCancelConnect": "Cancel connection",
+  "currentAccount": "Current account",
+  "calibrationIdentifierHelp": "Reference to the record where you compared this instrument against a multimeter. Example: BENCH-01-CAL-001. This is not a key and does not calibrate the board automatically.",
+  "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated."
 }

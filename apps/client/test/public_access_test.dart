@@ -16,6 +16,7 @@ import 'package:circuitlab_client/main.dart';
 
 class PublicApi extends CircuitApi {
   Map<String, String>? registration;
+  Map<String, dynamic>? enrollment;
   PublicApi({bool authenticated = false}) : super(store: web.Outbox()) {
     if (authenticated) {
       access = 'test';
@@ -43,7 +44,14 @@ class PublicApi extends CircuitApi {
     String path, {
     String method = 'GET',
     dynamic data,
-  }) async => path == '/auth/me' ? account : [];
+  }) async {
+    if (path == '/devices/enroll' && method == 'POST') {
+      enrollment = Map<String, dynamic>.from(data);
+      return {'id': 'synthetic-ui-instrument'};
+    }
+    return path == '/auth/me' ? account : [];
+  }
+
   @override
   Future<void> register(String mail, String password) async {
     registration = {'email': mail, 'password': password};
@@ -70,7 +78,7 @@ void main() {
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
   for (final language in ['en', 'es']) {
-    for (final width in [390.0, 1440.0]) {
+    for (final width in [320.0, 390.0, 680.0, 1024.0, 1440.0]) {
       testWidgets('Public registration and layout at $width in $language', (
         tester,
       ) async {
@@ -157,6 +165,23 @@ void main() {
         await tester.pumpAndSettle();
         expect(api.registration?['email'], 'student@example.test');
         expect(api.isAdmin, isFalse);
+        if (width >= 680) {
+          expect(find.text('student@example.test'), findsOneWidget);
+        }
+        await tester.tap(find.byKey(const ValueKey('accountIdentity')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<SelectableText>(
+                find.byKey(const ValueKey('accountEmailDetails')),
+              )
+              .data,
+          'student@example.test',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.text(strings.t('aVerifiableCycle')), findsNothing);
+        expect(find.text(strings.t('lowVoltageLaboratory')), findsNothing);
         expect(
           tester.getRect(find.byType(CircleAvatar)).right,
           greaterThan(width - 50),
@@ -183,6 +208,89 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });
+    }
+  }
+  for (final language in ['en', 'es']) {
+    for (final width in [320.0, 1024.0, 1440.0]) {
+      testWidgets(
+        'USB calibration guidance and account address at $width in $language',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 1100);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          SharedPreferences.setMockInitialValues({
+            'circuitlab.language': language,
+          });
+          final api = PublicApi(authenticated: true);
+          api.email =
+              'a.very.long.account.address.for.responsive.testing@example.test';
+          api.account!['email'] = api.email;
+          if (width == 1024) api.account!['role'] = 'admin';
+          final strings = AppStrings(language);
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [apiProvider.overrideWithValue(api)],
+              child: const CircuitLabApp(),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('accountIdentity')));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<SelectableText>(
+                  find.byKey(const ValueKey('accountEmailDetails')),
+                )
+                .data,
+            api.email,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          if (width < 1000) {
+            await tester.tap(find.byIcon(Icons.menu));
+            await tester.pumpAndSettle();
+          }
+          expect(find.text(strings.t('aVerifiableCycle')), findsNothing);
+          expect(find.text(strings.t('lowVoltageLaboratory')), findsNothing);
+          await tester.tap(find.text(strings.t('devices')));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text(strings.t('usbRegister')));
+          await tester.tap(find.text(strings.t('usbRegister')));
+          await tester.pumpAndSettle();
+          expect(
+            find.text(strings.t('calibrationIdentifierHelp')),
+            findsOneWidget,
+          );
+          expect(
+            find.text(strings.t('calibrationNotPrepared')),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.widgetWithText(FilledButton, strings.t('usbRegister')),
+          );
+          await tester.pumpAndSettle();
+          expect(api.enrollment, isNull);
+          expect(find.text(strings.t('fieldRequired')), findsNWidgets(2));
+          await tester.enterText(
+            find.byType(TextFormField).at(0),
+            'Synthetic UI instrument',
+          );
+          await tester.enterText(
+            find.byType(TextFormField).at(1),
+            'SYNTHETIC-REFERENCE-ONLY',
+          );
+          await tester.tap(
+            find.widgetWithText(FilledButton, strings.t('usbRegister')),
+          );
+          await tester.pumpAndSettle();
+          expect(api.enrollment?['calibration_id'], 'SYNTHETIC-REFERENCE-ONLY');
+          expect(api.enrollment?['transport'], 'browser_usb');
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
     }
   }
   test(
