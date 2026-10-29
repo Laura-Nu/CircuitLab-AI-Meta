@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/networking/api.dart';
 import '../core/password_visibility.dart';
 import '../l10n/app_strings.dart';
+import '../core/form_fields.dart';
 import '../l10n/language.dart';
 import '../main.dart';
 
@@ -111,13 +112,14 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                     ),
                     const SizedBox(height: 24),
                     if (!done) ...[
+                      const RequiredFieldsNotice(),
                       if (!widget.resetting)
                         TextFormField(
                           controller: email,
                           keyboardType: TextInputType.emailAddress,
                           autofillHints: const [AutofillHints.email],
                           decoration: InputDecoration(
-                            labelText: tr('emailAddress'),
+                            label: RequiredLabel(tr('emailAddress')),
                           ),
                           validator: (v) =>
                               RegExp(
@@ -132,7 +134,7 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                           TextFormField(
                             controller: token,
                             decoration: InputDecoration(
-                              labelText: tr('recoveryCode'),
+                              label: RequiredLabel(tr('recoveryCode')),
                             ),
                             validator: (v) => (v?.trim().length ?? 0) >= 32
                                 ? null
@@ -145,7 +147,7 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                           maxLength: 200,
                           autofillHints: const [AutofillHints.newPassword],
                           decoration: InputDecoration(
-                            labelText: tr('newPassword'),
+                            label: RequiredLabel(tr('newPassword')),
                             suffixIcon: PasswordVisibilityButton(
                               visible: passwordVisible,
                               onPressed: () => setState(
@@ -162,7 +164,7 @@ class _RecoveryPageState extends ConsumerState<RecoveryPage> {
                           controller: confirmation,
                           obscureText: !confirmationVisible,
                           decoration: InputDecoration(
-                            labelText: tr('confirmPassword'),
+                            label: RequiredLabel(tr('confirmPassword')),
                             suffixIcon: PasswordVisibilityButton(
                               visible: confirmationVisible,
                               onPressed: () => setState(
@@ -289,6 +291,8 @@ class _AccountsPanelState extends State<AccountsPanel> {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (context, update) => AlertDialog(
+          scrollable: true,
+          insetPadding: formDialogInsets(context),
           title: Text(tr('createUser')),
           content: SizedBox(
             width: 420,
@@ -298,11 +302,12 @@ class _AccountsPanelState extends State<AccountsPanel> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const RequiredFieldsNotice(),
                     TextFormField(
                       controller: email,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        labelText: tr('emailAddress'),
+                        label: RequiredLabel(tr('emailAddress')),
                       ),
                       validator: (v) =>
                           RegExp(
@@ -317,7 +322,7 @@ class _AccountsPanelState extends State<AccountsPanel> {
                       obscureText: !passwordVisible,
                       maxLength: 200,
                       decoration: InputDecoration(
-                        labelText: tr('initialPassword'),
+                        label: RequiredLabel(tr('initialPassword')),
                         suffixIcon: PasswordVisibilityButton(
                           visible: passwordVisible,
                           onPressed: () =>
@@ -331,7 +336,9 @@ class _AccountsPanelState extends State<AccountsPanel> {
                     DropdownButtonFormField<String>(
                       initialValue: role,
                       isExpanded: true,
-                      decoration: InputDecoration(labelText: tr('role')),
+                      decoration: InputDecoration(
+                        label: RequiredLabel(tr('role')),
+                      ),
                       items: ['member', 'admin']
                           .map(
                             (r) =>
@@ -383,6 +390,8 @@ class _AccountsPanelState extends State<AccountsPanel> {
       await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
+          scrollable: true,
+          insetPadding: formDialogInsets(context),
           title: Text(tr('confirmAccountChange')),
           content: Text(text),
           actions: [

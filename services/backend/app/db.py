@@ -126,6 +126,7 @@ class Session(Base):
     family = Column(String, nullable=False)
     expected = Column(String, nullable=False)
     symptoms = Column(String, nullable=False)
+    purpose = Column(String(20), nullable=False, default="diagnosis", server_default="diagnosis")
     supply_v = Column(Float, nullable=False)
     diagnosis_mode = Column(String, nullable=False, default=lambda: settings().ai_mode)
     language = Column(String(2), nullable=False, default="es", server_default="es")

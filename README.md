@@ -630,6 +630,88 @@ do not establish physical accuracy or guarantee every model response is correct.
 Existing model responses remain in the audit trail; the updated rules apply to
 subsequent analyses.
 
+### Session purpose and required inputs
+
+Choose **Diagnose a fault** when reporting an observed problem. Its symptom
+description is required. Choose **Check operation** to assess a circuit without
+a reported fault; symptoms become optional observations and are stored as empty
+when omitted. This does not mean that the circuit is already working.
+
+Both purposes require a circuit name, supported family, supply voltage, expected
+behavior, confirmed connections and test-point acceptance ranges. The model
+receives the persisted purpose and guides authorized measurements against those
+criteria. In-range readings still require the declared functional observation
+before the assessment can finish as no fault observed. No intervention or repair
+is invented to complete a healthy assessment. Simulation labels and physical
+verification rules apply to both purposes.
+
+Required input labels have an asterisk and a localized required-field notice.
+Search and filter controls remain optional. Every used test point needs its
+label and both voltage limits; unused points can be left entirely empty or
+removed. Form validation preserves typed entries. Dialogs and their titles can
+scroll with the soft keyboard open, including a short landscape viewport.
+
+Version 0.1.8/build 9 includes these client changes. Deploy both API and worker
+as well as web: migration 0007 adds the session purpose with the default
+diagnosis for existing records, preserving their symptoms. The live capability
+list includes `operation_assessment`. Older clients retain the default diagnosis
+behavior. The downloadable APK must also be updated.
+
+### Workspace performance
+
+Version 0.1.7/build 8 adds a protected `GET /api/v1/workspace` projection for
+the account, session summaries, device list and service configuration. Opening a
+session uses `GET /api/v1/sessions/{id}/progress`; subsequent polls pass its known
+version and last event sequence. An unchanged session returns job status without
+downloading its evidence, hypotheses or history again. These responses use
+`Cache-Control: no-store` and retain the existing session authorization rules.
+
+The active session polls every four seconds, with workspace metadata refreshed
+about every thirty seconds. Finished sessions stop frequent detail polling;
+background apps pause polling and refresh when resumed. A real tool-execution
+receipt advances the analysis banner from reviewing evidence to comparing
+hypotheses. Background polling does not extend the user's idle authentication
+session. Older backends retain the existing endpoint fallback.
+
+Meta analysis remains asynchronous. The initial model turn calls only the
+authorized observation function; context and images are sent with its actual
+result to the final reasoning turn. Both upstream calls remain audited. The
+output prompt requests concise bilingual answers. Equal prediction wording does
+not trigger a retry by itself: distinct causes can share an expected outcome.
+Competing hypotheses, authorized points and evidence references remain required.
+Existing connection confirmations must be considered before repeating a question.
+These changes reduce unnecessary work; they do not guarantee model latency or
+replace physical measurements and functional verification.
+
+For an existing VPS installation, rebuilding the app does not activate static
+compression. After pulling the reviewed changes, add the following line **inside
+only CircuitLab's HTTPS `server { ... }` block**, after its hidden-file deny rule:
+
+```nginx
+include /var/www/circuitlab/infra/nginx/circuitlab.performance.inc;
+```
+
+Do not add it twice. Keep that virtual host's existing domain, certificate, root
+and API proxy. The include compresses only public JavaScript, CSS, JSON, WebAssembly
+and SVG files under `/app/` or `/assets/`; it does not match authenticated API paths.
+It is also included by the HTTPS template for new installations. See the
+[official Nginx gzip module documentation](https://nginx.org/en/docs/http/ngx_http_gzip_module.html).
+
+Validate the full configuration before a graceful reload, then check negotiation:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl --fail --silent --show-error -H 'Accept-Encoding: gzip' -I \
+  https://circuitlab.doc-ia.cloud/app/main.dart.js
+```
+
+Run the reload only if validation succeeds. Expect `Content-Encoding: gzip` and
+`Vary: Accept-Encoding`. The deployment helper does not edit or reload Nginx.
+Rebuild both web and the downloadable Android APK for this release; a web build
+does not update the packaged mobile client. After deploying the API and worker,
+the live health capabilities must also include `lightweight_polling`.
+
 ### Activate the domain through the existing Nginx
 
 1. Point the DNS record for `circuitlab.doc-ia.cloud` at the VPS. Check that no existing site owns that

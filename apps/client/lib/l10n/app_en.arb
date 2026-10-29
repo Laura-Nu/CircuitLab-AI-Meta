@@ -466,5 +466,20 @@
   "baselineResultNotice": "Assessment without intervention; no physical repair is established.",
   "finalizingOutcome": "Finalizing the result",
   "baselineFunctionalNotice": "Perform the declared functional check under the stated conditions and record what you actually observed.",
-  "baselineFunctionalConfirmed": "I performed this check after recording the circuit readings."
+  "baselineFunctionalConfirmed": "I performed this check after recording the circuit readings.",
+  "analysisPhaseReviewing": "Reviewing the recorded circuit evidence.",
+  "analysisPhaseComparing": "Comparing hypotheses and preparing the next step.",
+  "requiredField": "Required",
+  "requiredFieldsNotice": "* Required fields",
+  "fieldRequired": "Complete this required field.",
+  "fieldMinimumCharacters": "Enter at least {count} characters.",
+  "sessionPurpose": "What would you like to do?",
+  "purposeDiagnosis": "Diagnose a fault",
+  "purposeCheckOperation": "Check operation",
+  "operationAssessmentHelp": "No fault needs to be reported. Define how the circuit should work; we will guide the checks. Readings and a functional observation are required to finish.",
+  "optionalObservations": "Additional observations (optional)",
+  "noSymptomsReported": "No symptoms reported.",
+  "testPointRequiredNotice": "For each point you use, all three marked fields are required. Leave an unused point completely empty or remove it.",
+  "validVoltageRequired": "Enter a voltage between 0 and 5 V.",
+  "positiveSupplyRequired": "Enter a supply greater than 0 and up to 5 V."
 }

@@ -88,7 +88,7 @@ async def language_headers(request: Request, call_next):
     response.headers.setdefault("Content-Language", request_language(request))
     vary = response.headers.get("Vary", "")
     response.headers["Vary"] = ", ".join(filter(None, [vary, "Accept-Language"]))
-    if request.url.path.startswith(("/api/v1/auth/", "/api/v1/admin/")):
+    if request.url.path.startswith(("/api/v1/auth/", "/api/v1/admin/")) or request.url.path == "/api/v1/workspace" or request.url.path.endswith("/progress"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -247,9 +247,30 @@ def create_session(
     )
     db.add(session)
     db.flush()
-    record(db, session, "session_created", {"family": session.family})
+    record(db, session, "session_created", {"family": session.family, "purpose": session.purpose})
     commit(db)
     return serialize(session)
+
+
+def session_summaries(db, user):
+    member_ids = select(Member.session_id).where(Member.user_id == user.id)
+    columns = [getattr(Session, key) for key in (
+        "id", "owner_id", "title", "family", "supply_v", "state", "version",
+        "analysis_steps", "spec_version", "created_at", "purpose",
+    )]
+    return [dict(row) for row in db.execute(select(*columns).where(
+        or_(Session.owner_id == user.id, Session.id.in_(member_ids)),
+    ).order_by(Session.created_at.desc()).limit(100)).mappings()]
+
+
+@app.get(prefix + "/workspace")
+def workspace(user=Depends(current_user), db: DBSession = Depends(get_db)):
+    return {
+        "account": public_user(user), "health": live(),
+        "sessions": session_summaries(db, user),
+        "devices": [{k: v for k, v in serialize(row).items() if k != "token_digest"}
+                    for row in db.scalars(select(Device).where(Device.owner_id == user.id))],
+    }
 
 
 @app.get(prefix + "/sessions")
@@ -292,6 +313,36 @@ def get_session(session_id: str, user=Depends(current_user), db: DBSession = Dep
     result["storyboard_mode"] = settings().storyboard_mode
     result["can_edit"] = result["owner_id"] == user.id
     return result
+
+
+@app.get(prefix + "/sessions/{session_id}/progress")
+def session_progress(
+    session_id: str, known_version: int = Query(default=0, ge=0),
+    after: int = Query(default=0, ge=0), user=Depends(current_user),
+    db: DBSession = Depends(get_db),
+):
+    session = authorized(db, session_id, user)
+    changed = session.version != known_version
+    jobs = [serialize(j) for j in db.scalars(select(Job).where(
+        Job.session_id == session_id,
+    ).order_by(Job.created_at.desc()).limit(12))]
+    phase = None
+    active = next((j for j in jobs if j["kind"] == "analysis" and j["status"] == "running"), None)
+    if active:
+        executed = db.scalar(select(ModelRun.id).where(
+            ModelRun.session_id == session_id,
+            ModelRun.data["job_id"].as_string() == active["id"],
+            ModelRun.data["run_kind"].as_string() == "tool_execution",
+        ).limit(1))
+        phase = "comparing" if executed else "reviewing"
+    return {
+        "id": session.id, "state": session.state, "version": session.version,
+        "jobs": list(reversed(jobs)), "analysis_phase": phase,
+        "snapshot": get_session(session_id, user=user, db=db) if changed else None,
+        "events": [serialize(e) for e in db.scalars(select(Event).where(
+            Event.session_id == session_id, Event.sequence > after,
+        ).order_by(Event.sequence).limit(500))] if changed else [],
+    }
 
 
 @app.post(prefix + "/sessions/{session_id}/storyboards", status_code=202)

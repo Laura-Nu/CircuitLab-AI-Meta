@@ -467,7 +467,22 @@ const localizedMessages = <String, Map<String, String>>{
     "baselineResultNotice": "Assessment without intervention; no physical repair is established.",
     "finalizingOutcome": "Finalizing the result",
     "baselineFunctionalNotice": "Perform the declared functional check under the stated conditions and record what you actually observed.",
-    "baselineFunctionalConfirmed": "I performed this check after recording the circuit readings."
+    "baselineFunctionalConfirmed": "I performed this check after recording the circuit readings.",
+    "analysisPhaseReviewing": "Reviewing the recorded circuit evidence.",
+    "analysisPhaseComparing": "Comparing hypotheses and preparing the next step.",
+    "requiredField": "Required",
+    "requiredFieldsNotice": "* Required fields",
+    "fieldRequired": "Complete this required field.",
+    "fieldMinimumCharacters": "Enter at least {count} characters.",
+    "sessionPurpose": "What would you like to do?",
+    "purposeDiagnosis": "Diagnose a fault",
+    "purposeCheckOperation": "Check operation",
+    "operationAssessmentHelp": "No fault needs to be reported. Define how the circuit should work; we will guide the checks. Readings and a functional observation are required to finish.",
+    "optionalObservations": "Additional observations (optional)",
+    "noSymptomsReported": "No symptoms reported.",
+    "testPointRequiredNotice": "For each point you use, all three marked fields are required. Leave an unused point completely empty or remove it.",
+    "validVoltageRequired": "Enter a voltage between 0 and 5 V.",
+    "positiveSupplyRequired": "Enter a supply greater than 0 and up to 5 V."
   },
   "es": {
     "connectionConfirmed": "Conexión confirmada",
@@ -936,6 +951,21 @@ const localizedMessages = <String, Map<String, String>>{
     "baselineResultNotice": "Evaluación sin intervención; no acredita una reparación física.",
     "finalizingOutcome": "Finalizando el resultado",
     "baselineFunctionalNotice": "Realiza la comprobación funcional definida en las condiciones indicadas y registra lo que realmente observaste.",
-    "baselineFunctionalConfirmed": "Realicé esta comprobación después de registrar las lecturas del circuito."
+    "baselineFunctionalConfirmed": "Realicé esta comprobación después de registrar las lecturas del circuito.",
+    "analysisPhaseReviewing": "Revisando las evidencias registradas del circuito.",
+    "analysisPhaseComparing": "Contrastando hipótesis y preparando el siguiente paso.",
+    "requiredField": "Obligatorio",
+    "requiredFieldsNotice": "* Campos obligatorios",
+    "fieldRequired": "Completa este campo obligatorio.",
+    "fieldMinimumCharacters": "Ingresa al menos {count} caracteres.",
+    "sessionPurpose": "¿Qué quieres hacer?",
+    "purposeDiagnosis": "Diagnosticar una falla",
+    "purposeCheckOperation": "Comprobar funcionamiento",
+    "operationAssessmentHelp": "No necesitas informar una falla. Define cómo debería funcionar el circuito y te guiaremos en las comprobaciones. Para finalizar se necesitan lecturas y una observación funcional.",
+    "optionalObservations": "Observaciones adicionales (opcional)",
+    "noSymptomsReported": "No se informaron síntomas.",
+    "testPointRequiredNotice": "En cada punto que uses, los tres campos marcados son obligatorios. Deja un punto sin usar completamente vacío o elimínalo.",
+    "validVoltageRequired": "Ingresa una tensión entre 0 y 5 V.",
+    "positiveSupplyRequired": "Ingresa una alimentación mayor que 0 y de hasta 5 V."
   }
 };

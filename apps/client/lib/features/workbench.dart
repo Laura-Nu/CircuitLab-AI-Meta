@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/networking/api.dart';
 import '../main.dart';
 import '../l10n/app_strings.dart';
+import '../core/form_fields.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
@@ -28,7 +30,8 @@ class Workbench extends ConsumerStatefulWidget {
   ConsumerState<Workbench> createState() => _WorkbenchState();
 }
 
-class _WorkbenchState extends ConsumerState<Workbench> {
+class _WorkbenchState extends ConsumerState<Workbench>
+    with WidgetsBindingObserver {
   String tr(String key, [Map<String, Object?> args = const {}]) =>
       AppStrings.of(context).t(key, args);
   dynamic localized(Map data, String field) =>
@@ -69,16 +72,23 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   bool analysisRequested = false;
   int pending = 0;
   Timer? timer;
+  bool? efficientEndpoints;
+  DateTime? lastWorkspaceSync;
+  bool refreshAgain = false, foreground = true;
+
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     api = ref.read(apiProvider);
     api.addListener(authChanged);
     init();
     timer = Timer.periodic(Duration(seconds: 4), (_) {
-      if (api.signedIn && !busy && !refreshing) refresh(silent: true);
+      if (foreground && api.signedIn && !busy && !refreshing) {
+        refresh(silent: true);
+      }
     });
   }
 
@@ -109,7 +119,14 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground = state == AppLifecycleState.resumed;
+    if (foreground && api.signedIn) refresh(silent: true);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
     api.removeListener(authChanged);
     confirmPassword.dispose();
@@ -145,47 +162,173 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     }
   }
 
+  Future<Map<String, dynamic>> loadWorkspace() async {
+    if (efficientEndpoints != false) {
+      try {
+        final data = await api.request('/workspace');
+        if (data is Map && data['sessions'] is List && data['health'] is Map) {
+          efficientEndpoints = true;
+          return Map<String, dynamic>.from(data);
+        }
+        efficientEndpoints = false;
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 404) rethrow;
+        efficientEndpoints = false;
+      }
+    }
+    // Compatibility with an older backend, including the existing test adapters.
+    final values = await Future.wait<dynamic>([
+      api.request('/sessions'),
+      api.request('/auth/me'),
+      api.request('/devices'),
+      api.dio.get('/health/live').then((r) => r.data),
+    ]);
+    return {
+      'sessions': values[0],
+      'account': values[1],
+      'devices': values[2],
+      'health': values[3],
+    };
+  }
+
   Future<void> refresh({bool silent = false}) async {
-    if (refreshing) return;
+    if (refreshing) {
+      if (!silent) refreshAgain = true;
+      return;
+    }
     refreshing = true;
+    final wanted = section == 'sessions' ? widget.sessionId : null;
     try {
       final queue = await api.outbox.pending(api.scope);
-      if (mounted) setState(() => pending = queue.length);
-      if (queue.isNotEmpty) {
-        await api.sync();
-      }
-      final data = await api.request('/sessions') as List;
-      final account = await api.request('/auth/me');
-      if (account is Map) api.account = Map<String, dynamic>.from(account);
-      final hardware = await api.request('/devices') as List;
-      final health = (await api.dio.get('/health/live')).data;
-      Map<String, dynamic>? detail;
-      List<dynamic> history = [];
-      if (widget.sessionId != null) {
-        detail = Map<String, dynamic>.from(
-          await api.request('/sessions/${widget.sessionId}'),
+      if (queue.isNotEmpty) await api.sync();
+      final overviewActive = sessions.any((row) => row['state'] == 'analyzing');
+      final metadataAge = section == 'devices'
+          ? 8
+          : wanted == null
+          ? (overviewActive ? 4 : 15)
+          : 30;
+      final needWorkspace =
+          efficientEndpoints != true ||
+          !silent ||
+          queue.isNotEmpty ||
+          lastWorkspaceSync == null ||
+          DateTime.now().difference(lastWorkspaceSync!).inSeconds >=
+              metadataAge;
+      final metadataFuture = needWorkspace ? loadWorkspace() : null;
+      final old = selected?['id'] == wanted ? selected : null;
+      final active = (old?['jobs'] as List? ?? []).any(
+        (j) => ['pending', 'running'].contains(j['status']),
+      );
+      final needDetail =
+          wanted != null &&
+          (!silent ||
+              old == null ||
+              !sessionFinished(old['state']) ||
+              active ||
+              needWorkspace);
+      final resetHistory = !silent || old == null;
+      final known = resetHistory ? 0 : old['version'] ?? 0;
+      final after = resetHistory || events.isEmpty
+          ? 0
+          : events.last['sequence'] ?? 0;
+      Future<dynamic>? progressFuture;
+      if (needDetail && efficientEndpoints == true) {
+        progressFuture = api.request(
+          '/sessions/$wanted/progress?known_version=$known&after=$after',
         );
-        history = await api.request('/sessions/${widget.sessionId}/events');
       }
-      if (mounted) {
-        setState(() {
-          sessions = data;
-          devices = hardware;
-          selected = detail;
-          events = history;
+      final fetched = await Future.wait<dynamic>([
+        metadataFuture ?? Future<dynamic>.value(null),
+        progressFuture ?? Future<dynamic>.value(null),
+      ]);
+      final metadata = fetched[0];
+      if (metadata != null) lastWorkspaceSync = DateTime.now();
+      Map<String, dynamic>? detail = old;
+      List<dynamic> history = old == null ? [] : events;
+      if (needDetail) {
+        if (efficientEndpoints == true) {
+          final progress =
+              await (progressFuture != null
+                      ? Future<dynamic>.value(fetched[1])
+                      : api.request(
+                          '/sessions/$wanted/progress?known_version=$known&after=$after',
+                        ))
+                  as Map;
+          if (progress['snapshot'] is Map) {
+            detail = Map<String, dynamic>.from(progress['snapshot']);
+          } else if (detail != null) {
+            detail = Map<String, dynamic>.from(detail);
+          }
+          if (detail != null) {
+            detail['jobs'] = progress['jobs'];
+            detail['analysis_phase'] = progress['analysis_phase'];
+          }
+          final incoming = progress['events'] as List? ?? [];
+          final merged = <dynamic, dynamic>{};
+          if (!resetHistory) {
+            for (final event in history) {
+              merged[event['sequence']] = event;
+            }
+          }
+          for (final event in incoming) {
+            merged[event['sequence']] = event;
+          }
+          history = merged.values.toList()
+            ..sort((a, b) => (a['sequence'] as num).compareTo(b['sequence']));
+        } else {
+          final values = await Future.wait<dynamic>([
+            api.request('/sessions/$wanted'),
+            api.request('/sessions/$wanted/events'),
+          ]);
+          detail = Map<String, dynamic>.from(values[0]);
+          history = values[1] as List;
+        }
+      }
+      if (!mounted || !api.signedIn) return;
+      // A slow response from the previous route must never replace the new circuit.
+      if (wanted != (section == 'sessions' ? widget.sessionId : null)) {
+        refreshAgain = true;
+        return;
+      }
+      setState(() {
+        if (metadata != null) {
+          sessions = metadata['sessions'] as List;
+          devices = metadata['devices'] as List;
+          final account = metadata['account'];
+          if (account is Map) api.account = Map<String, dynamic>.from(account);
+          final health = metadata['health'] as Map;
           mode = health['ai_mode'];
           providerConfigured = health['provider_configured'] == true;
           simulationAllowed = health['simulation_allowed'] == true;
-          pending = 0;
-          error = null;
-        });
-      }
+        }
+        selected = wanted == null ? null : detail;
+        events = wanted == null ? [] : history;
+        if (detail != null) {
+          sessions = [
+            for (final row in sessions)
+              if (row['id'] == detail['id'])
+                {
+                  ...row as Map,
+                  'state': detail['state'],
+                  'version': detail['version'],
+                }
+              else
+                row,
+          ];
+        }
+        pending = 0;
+        if (!silent) error = null;
+      });
     } catch (e) {
       if (mounted && (!silent || !api.signedIn)) {
         setState(() => error = errorMessage(e, language: api.language));
       }
     } finally {
       refreshing = false;
+      if (refreshAgain && mounted && api.signedIn) {
+        refreshAgain = false;
+        unawaited(refresh());
+      }
     }
   }
 
@@ -409,6 +552,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       title: Text(label, style: TextStyle(fontSize: 13)),
       onTap: () {
         setState(() => section = id);
+        refresh();
         if (id == 'sessions') context.go('/');
         scaffoldKey.currentState?.closeDrawer();
       },
@@ -500,12 +644,13 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                         ),
                         style: TextStyle(color: muted),
                       ),
-                      SizedBox(height: 30),
+                      SizedBox(height: 24),
+                      const RequiredFieldsNotice(),
                       TextField(
                         controller: mail,
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
-                          labelText: tr('emailAddress'),
+                          label: RequiredLabel(tr('emailAddress')),
                           prefixIcon: Icon(Icons.alternate_email, size: 18),
                         ),
                       ),
@@ -514,7 +659,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                         controller: password,
                         obscureText: !passwordVisible,
                         decoration: InputDecoration(
-                          labelText: tr('password'),
+                          label: RequiredLabel(tr('password')),
                           suffixIcon: PasswordVisibilityButton(
                             visible: passwordVisible,
                             onPressed: () => setState(
@@ -531,7 +676,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                           controller: confirmPassword,
                           obscureText: !confirmationVisible,
                           decoration: InputDecoration(
-                            labelText: tr('confirmPassword'),
+                            label: RequiredLabel(tr('confirmPassword')),
                             suffixIcon: PasswordVisibilityButton(
                               visible: confirmationVisible,
                               onPressed: () => setState(
@@ -960,15 +1105,17 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         children: [
           Row(
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: muted,
-                  fontSize: 10,
-                  letterSpacing: 1.4,
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    letterSpacing: 1.4,
+                  ),
                 ),
               ),
-              Spacer(),
+              SizedBox(width: 8),
               Icon(icon, color: mint, size: 19),
             ],
           ),
@@ -1094,6 +1241,15 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   heading(Icons.flag_outlined, tr('sessionObjective')),
+                  SizedBox(height: 10),
+                  Text(
+                    tr(
+                      s['purpose'] == 'check_operation'
+                          ? 'purposeCheckOperation'
+                          : 'purposeDiagnosis',
+                    ),
+                    style: TextStyle(color: mint),
+                  ),
                   SizedBox(height: 16),
                   Text(
                     tr('expectedResult'),
@@ -1115,7 +1271,11 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                     ),
                   ),
                   SizedBox(height: 5),
-                  Text(s['symptoms']),
+                  Text(
+                    (s['symptoms'] as String? ?? '').isEmpty
+                        ? tr('noSymptomsReported')
+                        : s['symptoms'],
+                  ),
                 ],
               ),
             ),
@@ -1512,17 +1672,45 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     final symptoms = TextEditingController(text: draft['symptoms'] ?? '');
     final supply = TextEditingController(text: '${draft['supply_v'] ?? 5.0}');
     String family = draft['family'] ?? 'analog_sensor';
+    String purpose = draft['purpose'] ?? 'diagnosis';
     final accepted = await dialog(
       tr('newSession'),
       StatefulBuilder(
         builder: (_, update) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            field(title, tr('sessionName')),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: purpose,
+              isDense: false,
+              decoration: InputDecoration(
+                label: RequiredLabel(tr('sessionPurpose')),
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: 'diagnosis',
+                  child: Text(tr('purposeDiagnosis')),
+                ),
+                DropdownMenuItem(
+                  value: 'check_operation',
+                  child: Text(tr('purposeCheckOperation')),
+                ),
+              ],
+              onChanged: (value) => update(() => purpose = value!),
+            ),
+            if (purpose == 'check_operation') ...[
+              const SizedBox(height: 12),
+              Text(tr('operationAssessmentHelp')),
+            ],
+            const SizedBox(height: 16),
+            field(title, tr('sessionName'), minLength: 3),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: family,
-              decoration: InputDecoration(labelText: tr('circuitFamily')),
+              decoration: InputDecoration(
+                label: RequiredLabel(tr('circuitFamily')),
+              ),
               items: [
                 for (final f in families.entries)
                   DropdownMenuItem(value: f.key, child: Text(f.value)),
@@ -1530,11 +1718,26 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               onChanged: (v) => update(() => family = v!),
             ),
             SizedBox(height: 16),
-            field(supply, tr('supplyVoltageMaximum5V'), numeric: true),
+            field(
+              supply,
+              tr('supplyVoltageMaximum5V'),
+              numeric: true,
+              positive: true,
+            ),
             SizedBox(height: 16),
-            field(expected, tr('whatShouldItDo'), lines: 3),
+            field(expected, tr('whatShouldItDo'), lines: 3, minLength: 5),
             SizedBox(height: 16),
-            field(symptoms, tr('whatIsHappening'), lines: 3),
+            field(
+              symptoms,
+              tr(
+                purpose == 'diagnosis'
+                    ? 'whatIsHappening'
+                    : 'optionalObservations',
+              ),
+              lines: 3,
+              required: purpose == 'diagnosis',
+              minLength: 5,
+            ),
             SizedBox(height: 12),
             Text(
               tr('theSchematicAndCriteriaAreConfirmedInThe'),
@@ -1546,10 +1749,11 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       tr('createSession'),
     );
     final data = {
-      'title': title.text,
+      'title': title.text.trim(),
+      'purpose': purpose,
       'family': family,
-      'expected': expected.text,
-      'symptoms': symptoms.text,
+      'expected': expected.text.trim(),
+      'symptoms': symptoms.text.trim(),
       'supply_v': double.tryParse(supply.text.replaceAll(',', '.')),
     };
     await api.outbox.saveDraft(api.scope, data);
@@ -1616,9 +1820,10 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: point,
               decoration: InputDecoration(
-                labelText: tr('testPointRelativeToGnd'),
+                label: RequiredLabel(tr('testPointRelativeToGnd')),
               ),
               items: [
                 for (final p in points)
@@ -1632,6 +1837,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             field(value, tr('readingInV05'), numeric: true),
             SizedBox(height: 16),
             CheckboxListTile(
+              subtitle: Text(tr('requiredField')),
               value: confirmed,
               onChanged: (v) => update(() => confirmed = v!),
               contentPadding: EdgeInsets.zero,
@@ -1644,6 +1850,8 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         ),
       ),
       tr('saveReading'),
+      validate: () =>
+          confirmed ? null : tr('confirmTheConditionsBeforeMeasuring'),
     );
     if (accepted == true) {
       await action(() async {
@@ -1713,7 +1921,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         children: [
           Text(tr('closeInvestigationHelp')),
           SizedBox(height: 16),
-          field(reason, tr('closureReason'), lines: 3),
+          field(reason, tr('closureReason'), minLength: 5, lines: 3),
         ],
       ),
       tr('confirmCloseInvestigation'),
@@ -1744,7 +1952,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             style: TextStyle(color: muted),
           ),
           SizedBox(height: 16),
-          field(text, tr('completedIntervention'), lines: 4),
+          field(text, tr('completedIntervention'), minLength: 5, lines: 4),
         ],
       ),
       tr('confirmCompletedChange'),
@@ -1762,7 +1970,12 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     final text = TextEditingController();
     final accepted = await dialog(
       tr('confirmPhysicalConnection'),
-      field(text, tr('describeTheConnectionYouChecked'), lines: 3),
+      field(
+        text,
+        tr('describeTheConnectionYouChecked'),
+        minLength: 5,
+        lines: 3,
+      ),
       tr('confirmReview'),
     );
     if (accepted == true) {
@@ -1848,8 +2061,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: device,
-              decoration: InputDecoration(labelText: 'Bridge'),
+              decoration: InputDecoration(label: const RequiredLabel('Bridge')),
               items: [
                 for (final d in compatibleDevices())
                   DropdownMenuItem(
@@ -1863,8 +2077,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: point,
-              decoration: InputDecoration(labelText: tr('point')),
+              decoration: InputDecoration(label: RequiredLabel(tr('point'))),
               items: [
                 for (final p in points)
                   DropdownMenuItem(
@@ -1884,6 +2099,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             SizedBox(height: 12),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
+              subtitle: Text(tr('requiredField')),
               value: confirmed,
               onChanged: (v) => update(() => confirmed = v!),
               title: Text(
@@ -1895,6 +2111,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         ),
       ),
       tr('requestReading'),
+      validate: () => confirmed ? null : tr('confirmTheElectricalConditions'),
     );
     if (accepted == true) {
       await action(() async {
@@ -1953,9 +2170,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         builder: (_, update) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            field(name, tr('deviceName')),
+            field(name, tr('deviceName'), minLength: 2),
             SizedBox(height: 16),
-            field(calibration, tr('calibrationIdentifier')),
+            field(calibration, tr('calibrationIdentifier'), minLength: 3),
             SizedBox(height: 12),
             if (simulationAllowed)
               SwitchListTile(
@@ -2015,6 +2232,8 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
+        insetPadding: formDialogInsets(context),
         title: Text(title),
         content: SizedBox(
           width: 680,
@@ -2054,30 +2273,63 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     Widget content,
     String accept, {
     String? cancel,
+    String? Function()? validate,
   }) async {
+    final form = GlobalKey<FormState>();
+    String? validationError;
     final route = DialogRoute<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 580,
-          child: SingleChildScrollView(child: content),
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          scrollable: true,
+          insetPadding: formDialogInsets(context),
+          title: Text(title),
+          content: SizedBox(
+            width: 580,
+            child: SingleChildScrollView(
+              child: Form(
+                key: form,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (content is! Text) const RequiredFieldsNotice(),
+                    content,
+                    if (validationError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        validationError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(cancel ?? tr('cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                final validFields = form.currentState!.validate();
+                final message = validate?.call();
+                update(() => validationError = message);
+                if (validFields && message == null) {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: Text(accept),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(cancel ?? tr('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(accept),
-          ),
-        ],
       ),
     );
     final result = await Navigator.of(context, rootNavigator: true).push(route);
-    // The pop result precedes the closing animation. Controllers must remain alive
-    // until the route is fully removed from the widget tree.
     await route.completed;
     return result;
   }
@@ -2087,13 +2339,40 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     String label, {
     int lines = 1,
     bool numeric = false,
-  }) => TextField(
+    bool positive = false,
+    bool required = true,
+    int minLength = 1,
+  }) => TextFormField(
+    key: ValueKey((controller, required)),
     controller: controller,
     maxLines: lines,
     keyboardType: numeric
         ? TextInputType.numberWithOptions(decimal: true)
         : null,
-    decoration: InputDecoration(labelText: label),
+    decoration: InputDecoration(
+      label: required ? RequiredLabel(label) : Text(label),
+    ),
+    validator: (text) {
+      final value = text?.trim() ?? '';
+      if (!required && value.isEmpty) return null;
+      if (required && value.isEmpty) return tr('fieldRequired');
+      if (numeric) {
+        final number = double.tryParse(value.replaceAll(',', '.'));
+        if (number == null ||
+            !number.isFinite ||
+            number > 5 ||
+            number < 0 ||
+            (positive && number == 0)) {
+          return tr(
+            positive ? 'positiveSupplyRequired' : 'validVoltageRequired',
+          );
+        }
+      }
+      if (required && value.length < minLength) {
+        return tr('fieldMinimumCharacters', {'count': minLength});
+      }
+      return null;
+    },
   );
   Widget heading(IconData icon, String label) => Row(
     children: [

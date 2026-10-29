@@ -45,8 +45,9 @@ def test_meta_uses_validated_tool_output_and_keeps_provider_audit(monkeypatch):
                     "function": {"name": "get_recorded_observations", "arguments": "{}"}}]}}],
             })
         messages = kwargs["json"]["messages"]
-        assert messages[-1]["role"] == "tool" and messages[-1]["tool_call_id"] == "read-1"
-        observations = json.loads(messages[-1]["content"])
+        tool_result = next(m for m in messages if m["role"] == "tool")
+        assert tool_result["tool_call_id"] == "read-1"
+        observations = json.loads(tool_result["content"])
         assert observations["specification"]["points"][0]["id"] == "TP1"
         assert observations["reasoning_constraints"]["nominal_values_are_not_measurements"]
         assert observations["measurements"] == []
@@ -149,3 +150,24 @@ def test_container_decoding_never_fills_missing_or_invalid_diagnosis_fields(bad_
 def test_truncated_provider_json_is_rejected():
     with pytest.raises(ValueError):
         meta.parse_diagnosis('{"action": "read_voltage", "translations":')
+
+def test_shared_prediction_text_does_not_trigger_a_paid_retry_but_competing_causes_remain_required():
+    from app.schemas import HypothesisOutput, TestPrediction, BilingualText
+    result = DiagnosisOutput(
+        observations=[], hypotheses=[
+            HypothesisOutput(cause="Supply low", status="proposed", evidence_ids=[], explanation="Input unknown"),
+            HypothesisOutput(cause="Ratio wrong", status="proposed", evidence_ids=[], explanation="Ratio unknown"),
+        ],
+        action="read_voltage", point_id="TP1", instruction="Read input relative to common GND",
+        rationale="The same observation can leave several explanations compatible.",
+        test_predictions=[
+            TestPrediction(hypothesis_index=i, expected_outcome=BilingualText(
+                en="Normal input contradicts low supply; low input leaves ratio untested.",
+                es="Entrada normal contradice alimentación baja; entrada baja no comprueba relación.",
+            )) for i in (0, 1)
+        ],
+    )
+    assert meta.validate_predictions(result) == ["en", "es"]
+    result.test_predictions = result.test_predictions[:1]
+    with pytest.raises(ValueError):
+        meta.validate_predictions(result)

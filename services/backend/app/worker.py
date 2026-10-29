@@ -59,6 +59,7 @@ def snapshot(db, session):
         "diagnosis_mode": session.diagnosis_mode,
         "language": session.language,
         "family": session.family,
+        "purpose": session.purpose,
         "expected": session.expected,
         "symptoms": session.symptoms,
         "supply_v": session.supply_v,

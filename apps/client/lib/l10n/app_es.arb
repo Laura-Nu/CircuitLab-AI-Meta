@@ -466,5 +466,20 @@
   "baselineResultNotice": "Evaluación sin intervención; no acredita una reparación física.",
   "finalizingOutcome": "Finalizando el resultado",
   "baselineFunctionalNotice": "Realiza la comprobación funcional definida en las condiciones indicadas y registra lo que realmente observaste.",
-  "baselineFunctionalConfirmed": "Realicé esta comprobación después de registrar las lecturas del circuito."
+  "baselineFunctionalConfirmed": "Realicé esta comprobación después de registrar las lecturas del circuito.",
+  "analysisPhaseReviewing": "Revisando las evidencias registradas del circuito.",
+  "analysisPhaseComparing": "Contrastando hipótesis y preparando el siguiente paso.",
+  "requiredField": "Obligatorio",
+  "requiredFieldsNotice": "* Campos obligatorios",
+  "fieldRequired": "Completa este campo obligatorio.",
+  "fieldMinimumCharacters": "Ingresa al menos {count} caracteres.",
+  "sessionPurpose": "¿Qué quieres hacer?",
+  "purposeDiagnosis": "Diagnosticar una falla",
+  "purposeCheckOperation": "Comprobar funcionamiento",
+  "operationAssessmentHelp": "No necesitas informar una falla. Define cómo debería funcionar el circuito y te guiaremos en las comprobaciones. Para finalizar se necesitan lecturas y una observación funcional.",
+  "optionalObservations": "Observaciones adicionales (opcional)",
+  "noSymptomsReported": "No se informaron síntomas.",
+  "testPointRequiredNotice": "En cada punto que uses, los tres campos marcados son obligatorios. Deja un punto sin usar completamente vacío o elimínalo.",
+  "validVoltageRequired": "Ingresa una tensión entre 0 y 5 V.",
+  "positiveSupplyRequired": "Ingresa una alimentación mayor que 0 y de hasta 5 V."
 }

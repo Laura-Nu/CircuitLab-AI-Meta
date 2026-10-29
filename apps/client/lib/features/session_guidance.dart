@@ -268,34 +268,41 @@ class SessionGuidance extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(sessionIcon(state), color: tone, size: 27),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tr(sessionTitleKey(state)),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
+          if (analyzing)
+            AnalysisStatusBanner(
+              phase: session['analysis_phase'] as String?,
+              status: job?['status'] ?? 'submitting',
+              attempts: (job?['attempts'] as num?)?.toInt() ?? 0,
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(sessionIcon(state), color: tone, size: 27),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr(sessionTitleKey(state)),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      tr(sessionSummaryKey(state)),
-                      style: const TextStyle(
-                        color: Color(0xFFB9C6CF),
-                        height: 1.6,
+                      const SizedBox(height: 7),
+                      Text(
+                        tr(sessionSummaryKey(state)),
+                        style: const TextStyle(
+                          color: Color(0xFFB9C6CF),
+                          height: 1.6,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           if (!terminal && !analyzing && plan['instruction'] != null) ...[
             const SizedBox(height: 16),
             Text(
@@ -317,13 +324,6 @@ class SessionGuidance extends StatelessWidget {
             const LinearProgressIndicator(),
             const SizedBox(height: 8),
             Text(tr('finalizingOutcome')),
-          ],
-          if (analyzing) ...[
-            const SizedBox(height: 16),
-            AnalysisStatusBanner(
-              status: job?['status'] ?? 'submitting',
-              attempts: (job?['attempts'] as num?)?.toInt() ?? 0,
-            ),
           ],
           if (state == 'verifying' && checks.isNotEmpty) ...[
             const SizedBox(height: 18),

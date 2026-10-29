@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
+import '../core/form_fields.dart';
 
 class SpecificationDialog extends StatefulWidget {
   final Map<String, dynamic> specification;
@@ -89,7 +90,9 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         key: ValueKey(point.id + (minimum ? '-min' : '-max')),
         controller: minimum ? point.minimum : point.maximum,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(labelText: tr(minimum ? 'minV' : 'maxV')),
+        decoration: InputDecoration(
+          label: RequiredLabel(tr(minimum ? 'minV' : 'maxV')),
+        ),
         validator: (text) {
           if (unused(point)) return null;
           final value = voltage(text ?? '');
@@ -113,13 +116,21 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
   Widget pointFields(_PointFields point) => Padding(
     key: ValueKey(point.id),
     padding: const EdgeInsets.only(bottom: 16),
-    child: LayoutBuilder(
-      builder: (_, constraints) {
+    child: Builder(
+      builder: (context) {
+        final contentWidth =
+            (MediaQuery.sizeOf(context).width -
+                    formDialogInsets(context).horizontal -
+                    48)
+                .clamp(0, 650);
         final label = TextFormField(
           key: ValueKey('${point.id}-label'),
           controller: point.label,
           maxLength: 120,
-          decoration: InputDecoration(labelText: tr('label'), counterText: ''),
+          decoration: InputDecoration(
+            label: RequiredLabel(tr('label')),
+            counterText: '',
+          ),
           validator: (value) => !unused(point) && (value ?? '').trim().isEmpty
               ? tr('testPointLabelRequired')
               : null,
@@ -134,7 +145,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 }),
           icon: const Icon(Icons.remove_circle_outline),
         );
-        if (constraints.maxWidth < 480) {
+        if (contentWidth < 480) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -205,6 +216,8 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    insetPadding: formDialogInsets(context),
     title: Text(tr('schematicAndInitialCriteria')),
     content: SizedBox(
       width: 650,
@@ -215,6 +228,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const RequiredFieldsNotice(),
               Text(tr('physicallyConfirmTheConnectionsDefineTheRangesThat')),
               const SizedBox(height: 18),
               TextFormField(
@@ -222,7 +236,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 minLines: 3,
                 maxLines: 6,
                 decoration: InputDecoration(
-                  labelText: tr('confirmedConnectionsOnePerLine'),
+                  label: RequiredLabel(tr('confirmedConnectionsOnePerLine')),
                 ),
                 validator: (value) {
                   final lines = (value ?? '')
@@ -240,13 +254,15 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 maxLines: 5,
                 maxLength: 1000,
                 decoration: InputDecoration(
-                  labelText: tr('functionalTestCondition'),
+                  label: RequiredLabel(tr('functionalTestCondition')),
                 ),
                 validator: (value) => (value ?? '').trim().length < 5
                     ? tr('functionalDescriptionRequired')
                     : null,
               ),
               const SizedBox(height: 18),
+              Text(tr('testPointRequiredNotice')),
+              const SizedBox(height: 12),
               for (final point in points) pointFields(point),
               OutlinedButton.icon(
                 key: const ValueKey('add-test-point'),

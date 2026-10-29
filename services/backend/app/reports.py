@@ -81,6 +81,11 @@ def render_markdown(report, language, *, technical_details=False):
         f"{text('Sesión', 'Session')}: {safe_text(report['title'])} ({report['id']})",
         f"{text('Estado', 'State')}: {label(report['state'], language)}",
         f"{text('Familia', 'Family')}: {label(report['family'], language)}",
+        f"{text('Objetivo', 'Purpose')}: " + (
+            text("Comprobar funcionamiento", "Check operation")
+            if report.get("purpose") == "check_operation"
+            else text("Diagnosticar una falla", "Diagnose a fault")
+        ),
         f"{text('Modo', 'Mode')}: {'SIMULATION' if language == 'en' else 'SIMULACIÓN'}"
         if report["diagnosis_mode"] == "simulation"
         else text("Diagnóstico asistido", "Assisted diagnosis") if not technical_details else "Meta",
@@ -92,7 +97,7 @@ def render_markdown(report, language, *, technical_details=False):
         safe_text(report["expected"]),
         "",
         f"## {text('Síntomas', 'Symptoms')}",
-        safe_text(report["symptoms"]),
+        safe_text(report["symptoms"]) if report["symptoms"] else text("No se informaron síntomas.", "No symptoms reported."),
         "",
         f"## {text('Especificación previa', 'Initial specification')} v{report['spec_version']}",
         safe_text(report["specification"].get("functional_description", "")),

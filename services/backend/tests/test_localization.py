@@ -202,7 +202,9 @@ def test_upgrade_keeps_existing_session_and_defaults_to_spanish(tmp_path):
         db.execute(f"INSERT INTO sessions ({columns}) VALUES ({placeholders})", tuple(values.values()))
     migrate("head")
     with sqlite3.connect(path) as db:
-        assert db.execute("SELECT title, language FROM sessions WHERE id='existing'").fetchone() == (
+        assert db.execute("SELECT title, language, purpose, symptoms FROM sessions WHERE id='existing'").fetchone() == (
             "Original title",
             "es",
+            "diagnosis",
+            "Original symptoms",
         )

@@ -130,12 +130,12 @@ def invoke(*, provider, base, key, model, messages, tool, schema, max_tokens, ti
 
 
 def invoke_agent(*, provider, base, key, model, messages, tool, schema, max_tokens, timeout,
-                 read_tool, handler, on_exchange=None, reasoning_effort="low"):
+                 read_tool, handler, on_exchange=None, reasoning_effort="low", discovery_messages=None):
     """One allowlisted read, one returned result, one final response; no hardware side effects."""
     deadline = time.monotonic() + timeout
     first, first_audit = exchange(
-        provider=provider, base=base, key=key, model=model, messages=messages,
-        tools=[read_tool], max_tokens=max_tokens, timeout=timeout, on_exchange=on_exchange,
+        provider=provider, base=base, key=key, model=model, messages=discovery_messages or messages,
+        tools=[read_tool], max_tokens=min(max_tokens, 512) if discovery_messages else max_tokens, timeout=timeout, on_exchange=on_exchange,
         reasoning_effort=reasoning_effort,
     )
     calls = first.get("tool_calls") or []
@@ -162,10 +162,18 @@ def invoke_agent(*, provider, base, key, model, messages, tool, schema, max_toke
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError("Agent inference time budget exhausted")
+    tool_result = {"role": "tool", "tool_call_id": call["id"],
+                   "content": json.dumps(result, ensure_ascii=False)}
+    final_messages = (
+        [message for message in messages if message["role"] == "system"]
+        + [message for message in discovery_messages if message["role"] != "system"]
+        + [assistant, tool_result]
+        + [message for message in messages if message["role"] != "system"]
+        if discovery_messages else [*messages, assistant, tool_result]
+    )
     final, audit = exchange(
         provider=provider, base=base, key=key, model=model,
-        messages=[*messages, assistant, {"role": "tool", "tool_call_id": call["id"],
-                                       "content": json.dumps(result, ensure_ascii=False)}],
+        messages=final_messages,
         tools=[function_tool(tool, schema)], max_tokens=max_tokens, timeout=remaining, on_exchange=on_exchange,
         reasoning_effort=reasoning_effort,
     )

@@ -4,10 +4,12 @@ import '../l10n/app_strings.dart';
 class AnalysisStatusBanner extends StatelessWidget {
   final String status;
   final int attempts;
+  final String? phase;
   const AnalysisStatusBanner({
     super.key,
     required this.status,
     this.attempts = 1,
+    this.phase,
   });
 
   @override
@@ -53,6 +55,16 @@ class AnalysisStatusBanner extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(strings.t('analysisProgressNotice')),
+                  if (phase != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      strings.t(
+                        phase == 'comparing'
+                            ? 'analysisPhaseComparing'
+                            : 'analysisPhaseReviewing',
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

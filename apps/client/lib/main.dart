@@ -57,7 +57,7 @@ class _CircuitLabAppState extends ConsumerState<CircuitLabApp> {
       title: 'CircuitLab AI',
       builder: (context, child) => SessionActivity(
         api: ref.read(apiProvider),
-        child: child ?? const SizedBox(),
+        child: SafeArea(child: child ?? const SizedBox()),
       ),
       debugShowCheckedModeBanner: false,
       routerConfig: router,
@@ -94,6 +94,7 @@ class _CircuitLabAppState extends ConsumerState<CircuitLabApp> {
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
+          errorMaxLines: 3,
           filled: true,
           fillColor: const Color(0xFF0F161D),
           border: OutlineInputBorder(

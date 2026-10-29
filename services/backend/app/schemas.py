@@ -55,8 +55,16 @@ class SessionCreate(Strict):
     title: str = Field(min_length=3, max_length=120)
     family: Literal["led_resistor", "voltage_divider", "analog_sensor"]
     expected: str = Field(min_length=5, max_length=2000)
-    symptoms: str = Field(min_length=5, max_length=2000)
+    purpose: Literal["diagnosis", "check_operation"] = "diagnosis"
+    symptoms: str = Field(default="", max_length=2000)
     supply_v: float = Field(gt=0, le=5)
+
+    @model_validator(mode="after")
+    def symptoms_for_diagnosis(self):
+        self.symptoms = self.symptoms.strip()
+        if self.purpose == "diagnosis" and len(self.symptoms) < 5:
+            raise ValueError("Diagnosis requires a description of the observed symptoms")
+        return self
 
 
 class Point(Strict):

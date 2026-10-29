@@ -742,6 +742,27 @@
         ]
       }
     },
+    "/api/v1/workspace": {
+      "get": {
+        "summary": "Workspace",
+        "operationId": "workspace_api_v1_workspace_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/sessions/{session_id}": {
       "get": {
         "summary": "Get Session",
@@ -759,6 +780,70 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}/progress": {
+      "get": {
+        "summary": "Session Progress",
+        "operationId": "session_progress_api_v1_sessions__session_id__progress_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "known_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Known Version"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
             }
           }
         ],
@@ -2280,11 +2365,20 @@
             "minLength": 5,
             "title": "Expected"
           },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "diagnosis",
+              "check_operation"
+            ],
+            "title": "Purpose",
+            "default": "diagnosis"
+          },
           "symptoms": {
             "type": "string",
             "maxLength": 2000,
-            "minLength": 5,
-            "title": "Symptoms"
+            "title": "Symptoms",
+            "default": ""
           },
           "supply_v": {
             "type": "number",
@@ -2299,7 +2393,6 @@
           "title",
           "family",
           "expected",
-          "symptoms",
           "supply_v"
         ],
         "title": "SessionCreate"

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
+import '../core/form_fields.dart';
 
 class FunctionalCheckDialog extends StatefulWidget {
   final String criteria;
@@ -30,6 +31,8 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
     final ready =
         confirmed && passed != null && observations.text.trim().length >= 5;
     return AlertDialog(
+      scrollable: true,
+      insetPadding: formDialogInsets(context),
       title: Text(tr('recordFunctionalTest')),
       content: SizedBox(
         width: 500,
@@ -38,6 +41,7 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const RequiredFieldsNotice(),
               Text(
                 tr(
                   widget.baseline
@@ -51,7 +55,7 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
               DropdownButtonFormField<bool>(
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: tr('functionalTestResult'),
+                  label: RequiredLabel(tr('functionalTestResult')),
                 ),
                 items: [
                   DropdownMenuItem(
@@ -71,12 +75,13 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
                 maxLines: 4,
                 maxLength: 2000,
                 decoration: InputDecoration(
-                  labelText: tr('functionalTestObservations'),
+                  label: RequiredLabel(tr('functionalTestObservations')),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
+                subtitle: Text(tr('requiredField')),
                 value: confirmed,
                 title: Text(
                   tr(
