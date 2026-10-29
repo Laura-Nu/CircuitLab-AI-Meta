@@ -89,7 +89,7 @@ void main() {
   });
   for (final language in ['es', 'en']) {
     final strings = AppStrings(language);
-    for (final width in [390.0, 1440.0]) {
+    for (final width in [390.0, 1440.0, 3440.0]) {
       testWidgets('Guided measurement can be recorded at $width in $language', (
         tester,
       ) async {
@@ -140,6 +140,10 @@ void main() {
         await tester.tap(find.text('Divisor del laboratorio'));
         await tester.pumpAndSettle();
         expect(find.text('Mide TP1 respecto a GND'), findsOneWidget);
+        if (width > 2000) {
+          final guide = find.byKey(const ValueKey('session-guidance'));
+          expect(tester.getSize(guide).width, lessThanOrEqualTo(1350));
+        }
         expect(tester.takeException(), isNull);
         await tester.ensureVisible(find.text(strings.t('recordMeasurement')));
         await tester.tap(find.text(strings.t('recordMeasurement')));

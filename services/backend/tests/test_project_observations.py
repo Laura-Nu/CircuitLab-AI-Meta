@@ -176,3 +176,64 @@ def test_sensor_criteria_require_unit_and_exact_comparable_target():
     for extra in ({"unit": "°C"}, {"unit": "V", "min_value": 0, "max_value": 5}):
         with pytest.raises(ValueError):
             Point(id="TP1", label="Temperature", kind="numeric", value_kind="number", **extra)
+
+
+@pytest.mark.parametrize("board", ["Arduino UNO", "ESP32", "Raspberry Pi Pico", "Raspberry Pi", "STM32"])
+def test_board_description_is_open_and_preserves_multiple_modules(client, headers, board):
+    result = client.post(P + "/sessions", headers=headers, json={
+        "title": "Multi-module project fixture", "family": "microcontroller", "purpose": "check_operation",
+        "setup": f"{board} with temperature, humidity, RFID, GPS and additional modules",
+        "expected": "Observe every declared module under its confirmed conditions", "supply_v": 3.3,
+    })
+    assert result.status_code == 201, result.text
+    assert result.json()["setup"].startswith(board)
+
+
+def test_32_mixed_observations_complete_without_the_old_eight_step_cutoff(client, headers):
+    created = client.post(P + "/sessions", headers=headers, json={
+        "title": "32 observations fixture", "family": "microcontroller", "purpose": "check_operation",
+        "setup": "ESP32 and multiple synthetic sensor modules", "supply_v": 3.3,
+        "expected": "All declared module observations must satisfy their individual criteria",
+    }).json()
+    path = f"{P}/sessions/{created['id']}"
+    definitions = [
+        ({"kind": "numeric", "value_kind": "number", "unit": "°C", "min_value": -40, "max_value": 100}, 22, "°C"),
+        ({"kind": "numeric", "value_kind": "number", "unit": "%", "min_value": 0, "max_value": 100}, 50, "%"),
+        ({"kind": "digital_state", "value_kind": "boolean", "expected_state": False}, False, "boolean"),
+        ({"kind": "text", "value_kind": "text", "expected_text": "FIX"}, "FIX", "text"),
+    ]
+    points = [{"id": f"TP{i + 1}", "label": f"Module observation {i + 1}", **definitions[i % 4][0]}
+              for i in range(32)]
+    specification = {
+        "version": created["version"], "confirmed": True,
+        "connections": ["Synthetic confirmed wiring and compatible individual module supplies"],
+        "functional_description": "Observe the complete synthetic project under the stated condition",
+        "points": points,
+    }
+    configured = client.patch(path + "/specification", headers=headers, json=specification)
+    assert configured.status_code == 200, configured.text
+    assert client.patch(path + "/specification", headers=headers, json={
+        **specification, "version": configured.json()["version"],
+        "points": [*points, {**points[0], "id": "TP33"}],
+    }).status_code == 422
+    assert client.post(path + "/analysis", headers=headers).status_code == 202
+    process(*claim())
+    for i in range(32):
+        _, value, unit = definitions[i % 4]
+        recorded = client.post(path + "/measurements", headers=headers, json={
+            "client_id": f"many-modules-{i + 1}", "point_id": f"TP{i + 1}", "value": value,
+            "unit": unit, "conditions_confirmed": True, "measured_at": time.time(),
+        })
+        assert recorded.status_code == 201, recorded.text
+        item = claim()
+        assert item, f"Missing continuation at observation {i + 1}"
+        process(*item)
+    row = client.get(path, headers=headers).json()
+    assert len(row["measurements"]) == 32
+    assert row["analysis_steps"] == 33 and row["state"] == "awaiting_functional_check"
+    completed = client.post(path + "/baseline-check", headers=headers, json={
+        "client_id": "many-modules-functional", "passed": True, "confirmed": True,
+        "observations": "Complete synthetic multi-module behavior observed", "performed_at": time.time(),
+    })
+    assert completed.status_code == 201, completed.text
+    assert client.get(path, headers=headers).json()["state"] == "no_fault_found"

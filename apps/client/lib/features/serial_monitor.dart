@@ -10,14 +10,15 @@ class SerialMonitor extends StatefulWidget {
   final String sessionId;
   final bool canSave;
   final Future<void> Function() onSaved;
+  final UsbSerialPort? serial;
   const SerialMonitor({super.key, required this.api, required this.sessionId,
-    required this.canSave, required this.onSaved});
+    required this.canSave, required this.onSaved, this.serial});
   @override
   State<SerialMonitor> createState() => _SerialMonitorState();
 }
 
 class _SerialMonitorState extends State<SerialMonitor> {
-  final port = UsbSerialPort();
+  late final port = widget.serial ?? UsbSerialPort();
   Timer? timer;
   int baudRate = 115200, sequence = 0, savedSequence = 0, dropped = 0;
   int generation = 0;
@@ -124,30 +125,39 @@ class _SerialMonitorState extends State<SerialMonitor> {
       subtitle: Text(strings.t('serialMonitorSubtitle')),
       leading: const Icon(Icons.usb),
       childrenPadding: const EdgeInsets.only(bottom: 20),
-      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(strings.t('serialMonitorHelp')),
         const SizedBox(height: 16),
         if (!port.supported) Text(strings.t('serialUnsupported')) else ...[
           DropdownButtonFormField<int>(
-            initialValue: baudRate, isExpanded: true,
+            initialValue: baudRate, isExpanded: true, isDense: false, itemHeight: null,
             decoration: InputDecoration(labelText: strings.t('serialBaudRate')),
             items: [for (final baud in [9600, 19200, 38400, 57600, 115200])
               DropdownMenuItem(value: baud, child: Text('$baud baud'))],
             onChanged: connected || connecting || saving ? null : (value) => setState(() => baudRate = value!),
           ),
           const SizedBox(height: 12),
-          Wrap(spacing: 12, runSpacing: 12, children: [
-            OutlinedButton.icon(
-              onPressed: saving ? null : connected || connecting ? disconnect : connect,
-              icon: Icon(connected || connecting ? Icons.close : Icons.usb),
-              label: Text(strings.t(connected || connecting ? 'serialDisconnect' : 'serialConnect')),
-            ),
-            FilledButton.icon(
-              onPressed: widget.canSave && !saving && lines.isNotEmpty && sequence != savedSequence ? save : null,
-              icon: const Icon(Icons.save_outlined), label: Text(strings.t(saving ? 'serialSaving' : 'serialSave')),
-            ),
-          ]),
+          LayoutBuilder(builder: (context, constraints) {
+            final buttons = <Widget>[
+              OutlinedButton.icon(
+                onPressed: saving ? null : connected || connecting ? disconnect : connect,
+                icon: Icon(connected || connecting ? Icons.close : Icons.usb),
+                label: Text(strings.t(connected || connecting ? 'serialDisconnect' : 'serialConnect'),
+                  textAlign: TextAlign.center),
+              ),
+              FilledButton.icon(
+                onPressed: widget.canSave && !saving && lines.isNotEmpty && sequence != savedSequence ? save : null,
+                icon: const Icon(Icons.save_outlined),
+                label: Text(strings.t(saving ? 'serialSaving' : 'serialSave'), textAlign: TextAlign.center),
+              ),
+            ];
+            final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+            return constraints.maxWidth / textScale < 480
+              ? Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [buttons.first, const SizedBox(height: 12), buttons.last])
+              : Wrap(spacing: 12, runSpacing: 12, children: buttons);
+          }),
           const SizedBox(height: 12),
           Text(strings.t(connecting ? 'serialConnecting' : connected ? 'serialListening' : 'serialDisconnected')),
           if (lines.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12),

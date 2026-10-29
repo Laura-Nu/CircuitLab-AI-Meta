@@ -22,7 +22,7 @@ The local preview runs in explicitly labeled simulation mode.
 ## Investigation workflow
 
 1. Describe the intended behavior, observed symptoms and supply voltage.
-2. Confirm connections, operating conditions and up to eight observations: voltage ranges, numeric sensor values with units, boolean states or exact text/codes.
+2. Confirm connections, operating conditions and up to 32 observations: voltage ranges, numeric sensor values with units, boolean states or exact text/codes.
 3. Attach circuit photographs and request analysis. The specification is frozen when analysis starts.
 4. Review competing explanations, predicted outcomes and the proposed measurement or clarification.
 5. Confirm the measurement conditions and record a manual reading or request an instrument reading.
@@ -225,6 +225,18 @@ Numeric data use finite minimum/maximum criteria in their declared units. Text c
 exactly, including case. A successful whole-project functional observation is still
 required to finish. Existing voltage and boolean investigations remain compatible.
 
+A session supports several modules together and up to 32 separately checked observations,
+not a fixed catalog or a one-sensor-per-board restriction. One sensor can contribute
+multiple quantities. Guided operation checks allow enough analysis steps to request
+every declared observation and assess the full set; configured daily inference quotas
+remain enforced. Large investigations may need to continue after quota renewal.
+
+Board names are open descriptions, including Raspberry Pi and Pico. Browser acquisition
+requires an actual serial device and program output; the application does not remotely
+discover GPIO, I2C or SPI modules. A Raspberry Pi computer may require a configured
+serial interface or a suitable USB–UART connection, depending on its hardware and setup.
+See the [Raspberry Pi serial documentation](https://www.raspberrypi.com/documentation/computers/configuration.html#configure-uarts).
+
 Inside the session, **Board USB · Data monitor** reads the board's existing serial
 output at the selected baud rate. It is passive: it sends no acquisition commands,
 uploads no sketch and does not discover connected sensors. Its firmware must already
@@ -253,7 +265,7 @@ Primary references: [Arduino serial output](https://docs.arduino.cc/language-ref
 [ESP32 serial console](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c3/api-guides/usb-serial-jtag-console.html),
 [browser serial requirements](https://developer.chrome.com/docs/capabilities/serial).
 
-Investigations support 1–8 authorized test points. The bilingual specification editor
+Investigations support 1–32 authorized observations/test points. The bilingual specification editor
 adds and removes point rows without renaming the remaining points; criteria freeze
 when analysis starts. Manual readings can use every authorized point. Bridge readings
 only offer points supported by an enrolled device; the reference firmware below still

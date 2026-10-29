@@ -164,7 +164,12 @@ def process(job_id, lease_token):
             session = db.get(Session, job.session_id)
             context = snapshot(db, session)
             kind = job.kind
-            exhausted = session.analysis_steps >= settings().max_analysis_steps
+            # A guided operation check can request every declared observation and
+            # then assess the complete set. Daily inference quotas still apply.
+            step_limit = max(settings().max_analysis_steps,
+                             len(session.specification.get("points", [])) + 1
+                             if session.purpose == "check_operation" else 0)
+            exhausted = session.analysis_steps >= step_limit
             story = db.scalar(select(Storyboard).where(Storyboard.job_id == job.id)) if kind == "storyboard" else None
             story_input = story.snapshot if story else None
             if session.diagnosis_mode == "meta" and (

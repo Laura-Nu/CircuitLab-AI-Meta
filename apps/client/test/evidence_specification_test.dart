@@ -105,7 +105,7 @@ void main() {
                 find.byKey(const ValueKey('add-test-point')),
               )
               .onPressed,
-          isNull,
+          isNotNull,
         );
         final remove = find.byTooltip(
           strings.t('removeTestPoint', {'point': 'TP2'}),

@@ -61,7 +61,6 @@ class _PointFields {
 }
 
 class _SpecificationDialogState extends State<SpecificationDialog> {
-  static const maximumPoints = 8;
   final formKey = GlobalKey<FormState>();
   late final connections = TextEditingController(
     text: (widget.specification['connections'] as List?)?.join('\n') ?? '',
@@ -123,6 +122,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         decoration: InputDecoration(
           label: RequiredLabel(tr(point.isNumber
             ? (minimum ? 'minimumValue' : 'maximumValue') : (minimum ? 'minV' : 'maxV'))),
+          errorMaxLines: 4,
         ),
         validator: (text) {
           if (unused(point)) return null;
@@ -143,16 +143,35 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         },
       );
 
+  Widget rangeFields(_PointFields point) => LayoutBuilder(
+    builder: (context, constraints) {
+      final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      if (constraints.maxWidth / textScale < 360) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            voltageField(point, minimum: true),
+            const SizedBox(height: 10),
+            voltageField(point, minimum: false),
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: voltageField(point, minimum: true)),
+          const SizedBox(width: 10),
+          Expanded(child: voltageField(point, minimum: false)),
+        ],
+      );
+    },
+  );
+
   Widget pointFields(_PointFields point) => Padding(
     key: ValueKey(point.id),
     padding: const EdgeInsets.only(bottom: 16),
     child: Builder(
       builder: (context) {
-        final contentWidth =
-            (MediaQuery.sizeOf(context).width -
-                    formDialogInsets(context).horizontal -
-                    48)
-                .clamp(0, 650);
         final label = TextFormField(
           key: ValueKey('${point.id}-label'),
           controller: point.label,
@@ -193,6 +212,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               ],
             ),
             DropdownButtonFormField<String>(
+              itemHeight: null,
               key: ValueKey('${point.id}-kind'),
               initialValue: point.kind,
               isExpanded: true,
@@ -214,6 +234,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               label,
               const SizedBox(height: 12),
               DropdownButtonFormField<bool>(
+                itemHeight: null,
                 isExpanded: true,
                 isDense: false,
                 key: ValueKey('${point.id}-expected-state'),
@@ -245,6 +266,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               label,
               const SizedBox(height: 12),
               TextFormField(
+                key: ValueKey('${point.id}-expected-text'),
                 controller: point.expectedText,
                 maxLength: 500,
                 decoration: InputDecoration(label: RequiredLabel(tr('expectedTextLabel')),
@@ -255,6 +277,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               label,
               const SizedBox(height: 12),
               TextFormField(
+                key: ValueKey('${point.id}-unit'),
                 controller: point.unit,
                 maxLength: 24,
                 decoration: InputDecoration(label: RequiredLabel(tr('sensorUnit')),
@@ -264,33 +287,12 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                   ? tr('sensorUnitRequired') : null,
               ),
               const SizedBox(height: 12),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: voltageField(point, minimum: true)),
-                const SizedBox(width: 10),
-                Expanded(child: voltageField(point, minimum: false)),
-              ]),
-            ] else if (contentWidth < 480) ...[
+              rangeFields(point),
+            ] else ...[
               label,
               const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: voltageField(point, minimum: true)),
-                  const SizedBox(width: 10),
-                  Expanded(child: voltageField(point, minimum: false)),
-                ],
-              ),
-            ] else
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 2, child: label),
-                  const SizedBox(width: 8),
-                  Expanded(child: voltageField(point, minimum: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: voltageField(point, minimum: false)),
-                ],
-              ),
+              rangeFields(point),
+            ],
           ],
         );
       },
@@ -442,12 +444,12 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               for (final point in points) pointFields(point),
               OutlinedButton.icon(
                 key: const ValueKey('add-test-point'),
-                onPressed: points.length < maximumPoints ? addPoint : null,
+                onPressed: points.length < maximumObservationPoints ? addPoint : null,
                 icon: const Icon(Icons.add),
                 label: Text(tr('addTestPoint')),
               ),
               const SizedBox(height: 12),
-              Text(tr('testPointLimit', {'count': '$maximumPoints'})),
+              Text(tr('testPointLimit', {'count': '$maximumObservationPoints'})),
               const SizedBox(height: 8),
               Text(tr('leaveUnusedPointsEmptyAllDefinedPointsWill')),
               if (pointError != null)

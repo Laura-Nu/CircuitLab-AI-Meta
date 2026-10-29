@@ -483,17 +483,20 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 Expanded(
                   child: SingleChildScrollView(
                     padding: EdgeInsets.all(wide ? 36 : 20),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1350),
-                      child: section == 'metrics' && api.isAdmin
-                          ? MetricsPanel(api: api)
-                          : section == 'users' && api.isAdmin
-                          ? AccountsPanel(api: api)
-                          : section == 'devices'
-                          ? devicePage()
-                          : selected == null
-                          ? dashboard()
-                          : sessionPage(),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 1350),
+                        child: section == 'metrics' && api.isAdmin
+                            ? MetricsPanel(api: api)
+                            : section == 'users' && api.isAdmin
+                            ? AccountsPanel(api: api)
+                            : section == 'devices'
+                            ? devicePage()
+                            : selected == null
+                            ? dashboard()
+                            : sessionPage(),
+                      ),
                     ),
                   ),
                 ),
@@ -1802,6 +1805,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
               isExpanded: true,
               initialValue: purpose,
               isDense: false,
+              itemHeight: null,
               decoration: InputDecoration(
                 label: RequiredLabel(tr('sessionPurpose')),
               ),
@@ -1825,6 +1829,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: family,
+              isDense: false,
+              itemHeight: null,
               decoration: InputDecoration(
                 label: RequiredLabel(tr('circuitFamily')),
               ),

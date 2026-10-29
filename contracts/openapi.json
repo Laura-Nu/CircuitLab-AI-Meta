@@ -3025,7 +3025,7 @@
               "$ref": "#/components/schemas/Point"
             },
             "type": "array",
-            "maxItems": 8,
+            "maxItems": 32,
             "minItems": 1,
             "title": "Points"
           },

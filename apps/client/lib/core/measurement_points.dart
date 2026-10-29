@@ -1,3 +1,5 @@
+const maximumObservationPoints = 32;
+
 const measurementPointKinds = <String, String>{
   'supply': 'measurementKindSupply',
   'sensor_signal': 'measurementKindSensor',
