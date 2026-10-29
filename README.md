@@ -244,6 +244,14 @@ uv run python -m bridge.main
 
 ### Direct browser USB
 
+Each session has a **Results and report** card showing persisted readings,
+the latest instrument request outcome, and a report available during the
+investigation. A USB connection alone does not start continuous acquisition.
+Diagnostic readings keep the point requested by the current check; the dialog
+explains its schematic label and the fixed TP1/A0, TP2/A1, TP3/A2 instrument
+channel mapping. Displayed readings and readable reports omit padding zeros
+without rounding away stored measurement precision. Numeric JSON is unchanged.
+
 The browser workspace shows the signed-in account in the sidebar above Sign out.
 Session changes refresh automatically every four seconds while active; workspace
 lists use a slower polling interval to limit requests. Returning to the tab forces
@@ -281,7 +289,7 @@ Cancellation and failures remain visible. A late-opened or cancelled connection
 cannot attach itself or close a newer attempt. Recoverable serial read errors use
 the replacement readable stream; invalid data during a reading still fails that
 reading. No sample is invented to recover a connection.
-Web and Android release 0.1.14/build 15 include this connection feedback.
+Web and Android release 0.1.15/build 16 include this connection feedback.
 
 Keep the connected tab visible. Hiding the tab, closing it, losing the USB port,
 signing out, or expiring the login stops acquisition. One short server connection
@@ -297,7 +305,7 @@ desktop browser. Unsupported browsers display manual-reading guidance. Existing
 Python/WebSocket bridges remain compatible for prepared laboratory installations.
 
 Deploy database migration **0008** with the API before using the new client.
-Web and Android release **0.1.14/build 15** include this workflow. The Windows
+Web and Android release **0.1.15/build 16** include this workflow. The Windows
 executable is retired from the repository and public site packaging. Rebuilding
 the site removes only its three named legacy public download artifacts.
 

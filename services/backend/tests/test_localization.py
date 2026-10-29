@@ -121,7 +121,8 @@ def test_english_workflow_preserves_measurements_and_both_text_versions(client, 
     markdown = client.get(f"{P}/sessions/{sid}/report?format=markdown", headers=auth)
     assert markdown.headers["content-language"] == "en"
     assert "## Measurements" in markdown.text and "## Timeline" in markdown.text
-    assert "0.040 V · Manual" in markdown.text
+    assert "0.04 V · Manual" in markdown.text
+    assert "0.040 V · Manual" not in markdown.text
     assert configured["expected"] in markdown.text
     assert "The value may not meet the specification" in markdown.text
 

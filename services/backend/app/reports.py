@@ -74,6 +74,16 @@ def render_markdown(report, language, *, technical_details=False):
     def timestamp(value):
         return datetime.fromtimestamp(value, UTC).isoformat(timespec="seconds")
 
+    def number(value):
+        if value is None:
+            return "—"
+        rendered = str(value)
+        if "." in rendered and "e" not in rendered.lower():
+            rendered = rendered.rstrip("0").rstrip(".")
+        if rendered == "-0":
+            rendered = "0"
+        return rendered.replace(".", ",") if language == "es" else rendered
+
     yes, no = text("Sí", "Yes"), text("No", "No")
     lines = [
         f"# CircuitLab AI · {text('Reporte de sesión', 'Session report')}",
@@ -89,7 +99,7 @@ def render_markdown(report, language, *, technical_details=False):
         f"{text('Modo', 'Mode')}: {'SIMULATION' if language == 'en' else 'SIMULACIÓN'}"
         if report["diagnosis_mode"] == "simulation"
         else text("Diagnóstico asistido", "Assisted diagnosis") if not technical_details else "Meta",
-        f"{text('Alimentación', 'Supply')}: {report['supply_v']} V",
+        f"{text('Alimentación', 'Supply')}: {number(report['supply_v'])} V",
         "",
         report["presentation"]["original_content_notice"],
         "",
@@ -105,7 +115,7 @@ def render_markdown(report, language, *, technical_details=False):
     for connection in report["specification"].get("connections", []):
         lines.append("- " + safe_text(connection))
     for point in report["specification"].get("points", []):
-        lines.append(f"- {point['id']} · {safe_text(point['label'])}: {point['min_v']}–{point['max_v']} V")
+        lines.append(f"- {point['id']} · {safe_text(point['label'])}: {number(point['min_v'])}–{number(point['max_v'])} V")
     lines += ["", f"## {text('Evidencia', 'Evidence')}"]
     for item in report["evidence"]:
         lines.append(f"- {item['id']} · {item['mime']} · SHA-256: {item['sha256']}")
@@ -151,7 +161,7 @@ def render_markdown(report, language, *, technical_details=False):
             else text("Diagnóstico", "Diagnosis")
         )
         lines.append(
-            f"- {item['point_id']}: {item['value']:.3f} V · {label(item['source'], language)} · {phase} · {timestamp(item['measured_at'])} · {item['id']}"
+            f"- {item['point_id']}: {number(item['value'])} V · {label(item['source'], language)} · {phase} · {timestamp(item['measured_at'])} · {item['id']}"
         )
     lines += ["", f"## {text('Intervenciones', 'Interventions')}"]
     for item in report["interventions"]:
@@ -179,7 +189,7 @@ def render_markdown(report, language, *, technical_details=False):
         lines.append(f"- {text('Origen de las lecturas', 'Reading source')}: {safe_text(data.get('verification_basis', 'legacy'))}")
         for check in data["checks"]:
             lines.append(
-                f"  - {check['point_id']}: {check['value']} V / {check['min_v']}–{check['max_v']} V · {label(check['source'], language)}"
+                f"  - {check['point_id']}: {number(check['value'])} V / {number(check['min_v'])}–{number(check['max_v'])} V · {label(check['source'], language)}"
             )
     for story in report.get("storyboards", []):
         if not story.get("data"):

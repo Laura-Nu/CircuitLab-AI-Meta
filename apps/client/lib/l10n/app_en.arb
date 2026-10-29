@@ -545,5 +545,16 @@
   "usbCancelConnect": "Cancel connection",
   "currentAccount": "Current account",
   "calibrationIdentifierHelp": "Reference to the record where you compared this instrument against a multimeter. Example: BENCH-01-CAL-001. This is not a key and does not calibrate the board automatically.",
-  "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated."
+  "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated.",
+  "requestedHardwarePointHelp": "This name comes from the confirmed schematic. The current check requested this point, so this reading cannot be replaced with another point.",
+  "instrumentChannelHint": "Connect “{point}” to instrument channel {pin}, with common GND. The point name does not change the pin read by the firmware.",
+  "sessionResultsTitle": "Results and report",
+  "sessionReadingsCount": "Recorded readings: {count}",
+  "latestRecordedReading": "Latest reading: {point} · {value} V · {source}",
+  "usbNoReadingYet": "No readings have been saved yet. Connecting USB does not start continuous acquisition: request a reading and confirm the electrical conditions.",
+  "hardwareWaitingForResult": "Request sent. Waiting for the instrument result…",
+  "hardwareReadFailed": "The last request did not save a reading: {reason}. Check the connection and firmware before retrying.",
+  "hardwareReadSaved": "The last USB request saved its reading in this session.",
+  "viewSessionReport": "View session report",
+  "sessionReportSnapshotHelp": "You can view the report during the investigation. It includes saved readings and recorded errors; an ongoing report does not establish a verified repair."
 }

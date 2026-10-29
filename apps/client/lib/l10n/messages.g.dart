@@ -546,7 +546,18 @@ const localizedMessages = <String, Map<String, String>>{
     "usbCancelConnect": "Cancel connection",
     "currentAccount": "Current account",
     "calibrationIdentifierHelp": "Reference to the record where you compared this instrument against a multimeter. Example: BENCH-01-CAL-001. This is not a key and does not calibrate the board automatically.",
-    "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated."
+    "calibrationNotPrepared": "If you have not checked the instrument yet, use manual readings. Entering a reference here does not prove it is calibrated.",
+    "requestedHardwarePointHelp": "This name comes from the confirmed schematic. The current check requested this point, so this reading cannot be replaced with another point.",
+    "instrumentChannelHint": "Connect “{point}” to instrument channel {pin}, with common GND. The point name does not change the pin read by the firmware.",
+    "sessionResultsTitle": "Results and report",
+    "sessionReadingsCount": "Recorded readings: {count}",
+    "latestRecordedReading": "Latest reading: {point} · {value} V · {source}",
+    "usbNoReadingYet": "No readings have been saved yet. Connecting USB does not start continuous acquisition: request a reading and confirm the electrical conditions.",
+    "hardwareWaitingForResult": "Request sent. Waiting for the instrument result…",
+    "hardwareReadFailed": "The last request did not save a reading: {reason}. Check the connection and firmware before retrying.",
+    "hardwareReadSaved": "The last USB request saved its reading in this session.",
+    "viewSessionReport": "View session report",
+    "sessionReportSnapshotHelp": "You can view the report during the investigation. It includes saved readings and recorded errors; an ongoing report does not establish a verified repair."
   },
   "es": {
     "connectionConfirmed": "Conexión confirmada",
@@ -1094,6 +1105,17 @@ const localizedMessages = <String, Map<String, String>>{
     "usbCancelConnect": "Cancelar conexión",
     "currentAccount": "Cuenta actual",
     "calibrationIdentifierHelp": "Referencia del registro donde comparaste este instrumento con un multímetro. Ejemplo: BANCO-01-CAL-001. No es una clave ni calibra la placa automáticamente.",
-    "calibrationNotPrepared": "Si todavía no comprobaste el instrumento, usa mediciones manuales. Escribir una referencia aquí no demuestra que esté calibrado."
+    "calibrationNotPrepared": "Si todavía no comprobaste el instrumento, usa mediciones manuales. Escribir una referencia aquí no demuestra que esté calibrado.",
+    "requestedHardwarePointHelp": "Este nombre viene del esquema confirmado. La comprobación actual pidió este punto; por eso no se puede elegir otro en esta lectura.",
+    "instrumentChannelHint": "Conecta el punto «{point}» al canal {pin} del instrumento, con GND común. El nombre del punto no cambia el pin que lee el firmware.",
+    "sessionResultsTitle": "Resultados y reporte",
+    "sessionReadingsCount": "Lecturas registradas: {count}",
+    "latestRecordedReading": "Última lectura: {point} · {value} V · {source}",
+    "usbNoReadingYet": "Todavía no hay lecturas guardadas. Conectar USB no inicia una captura continua: solicita una lectura y confirma las condiciones eléctricas.",
+    "hardwareWaitingForResult": "Solicitud enviada. Esperando el resultado del instrumento…",
+    "hardwareReadFailed": "La última solicitud no guardó una lectura: {reason}. Revisa la conexión y el firmware antes de reintentar.",
+    "hardwareReadSaved": "La última solicitud USB guardó su lectura en esta sesión.",
+    "viewSessionReport": "Ver reporte de la sesión",
+    "sessionReportSnapshotHelp": "Puedes consultar el reporte durante la investigación. Incluye las lecturas guardadas y los errores registrados; un reporte en curso no acredita una reparación."
   }
 };

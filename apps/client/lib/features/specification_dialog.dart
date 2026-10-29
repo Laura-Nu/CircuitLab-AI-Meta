@@ -1,3 +1,4 @@
+import '../core/number_format.dart';
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../core/form_fields.dart';
@@ -27,8 +28,12 @@ class _PointFields {
           ? point['kind'] as String
           : 'custom',
       label = TextEditingController(text: point['label']?.toString() ?? ''),
-      minimum = TextEditingController(text: point['min_v']?.toString() ?? ''),
-      maximum = TextEditingController(text: point['max_v']?.toString() ?? '');
+      minimum = TextEditingController(
+        text: point['min_v'] is num ? formatNumber(point['min_v'] as num) : '',
+      ),
+      maximum = TextEditingController(
+        text: point['max_v'] is num ? formatNumber(point['max_v'] as num) : '',
+      );
   void dispose() {
     label.dispose();
     minimum.dispose();
@@ -107,7 +112,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               value < 0 ||
               value > widget.supplyVoltage) {
             return tr('testPointVoltageInvalid', {
-              'max': widget.supplyVoltage.toString(),
+              'max': AppStrings.of(context).number(widget.supplyVoltage),
             });
           }
           final low = voltage(point.minimum.text);

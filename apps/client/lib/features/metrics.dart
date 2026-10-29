@@ -1,3 +1,4 @@
+import '../core/number_format.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -29,9 +30,7 @@ class _MetricsPanelState extends State<MetricsPanel> {
   String count(dynamic value) => MaterialLocalizations.of(
     context,
   ).formatDecimal((value as num? ?? 0).round());
-  String decimal(num value) => value
-      .toStringAsFixed(1)
-      .replaceAll('.', strings.language == 'es' ? ',' : '.');
+  String decimal(num value) => strings.number(value, decimalPlaces: 1);
   String duration(dynamic value) => value is! num
       ? '—'
       : value < 1000
@@ -455,6 +454,7 @@ class _MetricsPanelState extends State<MetricsPanel> {
                                     ? simulated
                                     : [],
                                 hovered: hovered,
+                                language: strings.language,
                               ),
                             ),
                           ),
@@ -756,11 +756,13 @@ class _MetricsPanelState extends State<MetricsPanel> {
 class _TrendPainter extends CustomPainter {
   final List<double?> values, secondary, simulated;
   final int? hovered;
+  final String language;
   _TrendPainter(
     this.values, {
     required this.secondary,
     required this.simulated,
     required this.hovered,
+    required this.language,
   });
   @override
   void paint(Canvas canvas, Size size) {
@@ -786,8 +788,12 @@ class _TrendPainter extends CustomPainter {
       final text = TextPainter(
         text: TextSpan(
           text: value >= 1000
-              ? '${(value / 1000).toStringAsFixed(1)}k'
-              : value.toStringAsFixed(value < 10 ? 1 : 0),
+              ? '${formatNumber(value / 1000, language: language, decimalPlaces: 1)}k'
+              : formatNumber(
+                  value,
+                  language: language,
+                  decimalPlaces: value < 10 ? 1 : 0,
+                ),
           style: const TextStyle(
             color: muted,
             fontSize: 10,

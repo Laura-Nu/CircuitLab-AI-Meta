@@ -23,6 +23,9 @@ import 'functional_check.dart';
 import 'specification_dialog.dart';
 import 'bridge_setup.dart';
 import 'session_guidance.dart';
+import 'session_results.dart';
+import 'hardware_point_field.dart';
+import '../core/number_format.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
 
@@ -1053,7 +1056,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
                           ),
                           SizedBox(height: 5),
                           Text(
-                            '${families[s['family']]} · ${s['supply_v']} V',
+                            '${families[s['family']]} · ${AppStrings.of(context).number(s['supply_v'] as num)} V',
                             style: TextStyle(color: muted, fontSize: 12),
                           ),
                         ],
@@ -1208,6 +1211,13 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onNew: createSession,
         ),
         SizedBox(height: 20),
+        SessionResults(
+          session: s,
+          events: events,
+          busy: busy,
+          onReport: () => showReport(readable: true),
+        ),
+        SizedBox(height: 16),
         Wrap(
           spacing: 8,
           runSpacing: 10,
@@ -1223,12 +1233,6 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 onPressed: busy ? null : pair,
                 icon: Icon(Icons.devices, size: 17),
                 label: Text(tr('shareReview')),
-              ),
-            if (!sessionFinished(state))
-              OutlinedButton.icon(
-                onPressed: () => showReport(readable: true),
-                icon: Icon(Icons.article_outlined, size: 17),
-                label: Text(tr('readableReport')),
               ),
             if (api.isAdmin)
               OutlinedButton.icon(
@@ -1461,7 +1465,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
                         ),
                       ),
                       Text(
-                        '${(m['value'] as num).toStringAsFixed(3)} V',
+                        '${AppStrings.of(context).number(m['value'] as num)} V',
                         style: TextStyle(fontFamily: 'monospace', fontSize: 18),
                       ),
                       badge(
@@ -1738,7 +1742,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final title = TextEditingController(text: draft['title'] ?? '');
     final expected = TextEditingController(text: draft['expected'] ?? '');
     final symptoms = TextEditingController(text: draft['symptoms'] ?? '');
-    final supply = TextEditingController(text: '${draft['supply_v'] ?? 5.0}');
+    final supply = TextEditingController(
+      text: formatNumber(draft['supply_v'] as num? ?? 5),
+    );
     String family = draft['family'] ?? 'analog_sensor';
     String purpose = draft['purpose'] ?? 'diagnosis';
     final accepted = await dialog(
@@ -2171,29 +2177,17 @@ class _WorkbenchState extends ConsumerState<Workbench>
               onChanged: (v) => update(() => device = v!),
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: point,
-              isDense: false,
-              decoration: InputDecoration(label: RequiredLabel(tr('point'))),
-              items: [
-                for (final p in points)
-                  DropdownMenuItem(
-                    value: p['id'] as String,
-                    child: Text(
-                      measurementPointName(s['specification'], p['id']),
-                      maxLines: 2,
-                    ),
-                  ),
-              ],
-              onChanged: s['state'] == 'awaiting_measurement'
-                  ? null
-                  : (v) => update(() {
-                      point = v!;
-                      if (!compatibleDevices().any((d) => d['id'] == device)) {
-                        device = compatibleDevices().first['id'];
-                      }
-                    }),
+            HardwarePointField(
+              specification: s['specification'],
+              points: points,
+              value: point,
+              locked: requested != null,
+              onChanged: (v) => update(() {
+                point = v;
+                if (!compatibleDevices().any((d) => d['id'] == device)) {
+                  device = compatibleDevices().first['id'];
+                }
+              }),
             ),
             SizedBox(height: 12),
             CheckboxListTile(
