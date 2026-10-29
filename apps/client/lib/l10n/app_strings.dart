@@ -21,6 +21,23 @@ class AppStrings {
   String number(num value, {int? decimalPlaces}) =>
       formatNumber(value, language: language, decimalPlaces: decimalPlaces);
 
+  String booleanValue(dynamic value) => value == null
+      ? t('readingStillNeeded')
+      : t(value == true ? 'booleanTrue' : 'booleanFalse');
+
+  String observation(dynamic value, [dynamic unit = 'V']) => value == null
+      ? t('readingStillNeeded')
+      : unit == 'boolean'
+      ? booleanValue(value)
+      : '${number(value as num)} V';
+
+  String criterion(Map point) =>
+      point['value_kind'] == 'boolean' || point['unit'] == 'boolean'
+      ? t('expectedBooleanState', {
+          'state': booleanValue(point['expected_state']),
+        })
+      : '${number(point['min_v'] as num)}–${number(point['max_v'] as num)} V';
+
   String label(String code) =>
       localizedMessages[language]?.containsKey(code) == true ? t(code) : code;
 }

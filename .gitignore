@@ -24,3 +24,6 @@ experiments/private/
 # Private Android release signing credentials.
 apps/client/android/key.properties
 *.keystore
+
+# Local PlatformIO build products and downloaded libraries.
+.pio/

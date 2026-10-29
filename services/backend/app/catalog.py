@@ -29,3 +29,23 @@ def localized_voltage_test(language):
             "Supply voltage within 0–5 V",
         ],
     }
+
+def localized_digital_test(language):
+    return {
+        "id": "digital_state_to_ground", "version": 1, "action": "read_digital",
+        "unit": "boolean", "sample_count": 20,
+        "procedure": (
+            "Read the confirmed logic input under the declared test condition. All samples must agree."
+            if language == "en" else
+            "Lee la entrada lógica confirmada en la condición declarada. Todas las muestras deben coincidir."
+        ),
+        "preconditions": [
+            "Logic-level compatibility, common GND and the instrument input are confirmed"
+            if language == "en" else
+            "Niveles lógicos compatibles, GND común y entrada del instrumento confirmados",
+            "Firmware explicitly supports read_digital; do not infer a program variable from a photo or voltage"
+            if language == "en" else
+            "El firmware admite read_digital; no se infiere una variable del programa desde una foto o voltaje",
+        ],
+        "manual_alternative": "request_manual_measurement",
+    }

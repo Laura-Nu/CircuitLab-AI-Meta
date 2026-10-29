@@ -244,6 +244,10 @@ uv run python -m bridge.main
 
 ### Direct browser USB
 
+The specification form separates confirmed wiring, expected operation, and
+measurement locations with expected voltage limits. Its optional Arduino/sensor
+example provides guidance without pre-filling fields or changing USB channel mappings.
+
 Each session has a **Results and report** card showing persisted readings,
 the latest instrument request outcome, and a report available during the
 investigation. A USB connection alone does not start continuous acquisition.
@@ -289,7 +293,7 @@ Cancellation and failures remain visible. A late-opened or cancelled connection
 cannot attach itself or close a newer attempt. Recoverable serial read errors use
 the replacement readable stream; invalid data during a reading still fails that
 reading. No sample is invented to recover a connection.
-Web and Android release 0.1.15/build 16 include this connection feedback.
+Web and Android release 0.1.16/build 17 include this connection feedback.
 
 Keep the connected tab visible. Hiding the tab, closing it, losing the USB port,
 signing out, or expiring the login stops acquisition. One short server connection
@@ -305,7 +309,7 @@ desktop browser. Unsupported browsers display manual-reading guidance. Existing
 Python/WebSocket bridges remain compatible for prepared laboratory installations.
 
 Deploy database migration **0008** with the API before using the new client.
-Web and Android release **0.1.15/build 16** include this workflow. The Windows
+Web and Android release **0.1.16/build 17** include this workflow. The Windows
 executable is retired from the repository and public site packaging. Rebuilding
 the site removes only its three named legacy public download artifacts.
 
@@ -946,8 +950,12 @@ python3 scripts/backup_vps.py --verify-restoration .tools/backups/snapshot-YOUR_
 Snapshots contain a custom-format PostgreSQL dump, the immutable evidence archive
 and a checksum manifest, under private `.tools/backups/` directories. They contain
 private account/investigation data and must never enter Git or the public web root.
-Database references are captured before copying immutable evidence; concurrent new
-uploads may add unused files but cannot remove the referenced images.
+Withdrawn evidence metadata and its audit trail remain in the database dump; intentionally
+deleted image files are not required by restoration checks. Previous backups can retain
+older copies according to your backup retention policy. Avoid photo removal during a
+snapshot: a removal between the database dump and archive capture can invalidate that
+snapshot. A restoration rehearsal detects missing active images; rerun the snapshot
+during a quiet period before treating it as a verified recovery point.
 
 The restoration rehearsal creates only its own temporary PostgreSQL container,
 with no network, no published ports and bounded CPU/memory. It restores the database,
@@ -979,3 +987,156 @@ These commands install only the named CircuitLab units. They do not restart Ngin
 Docker, PM2 or other applications. Actual off-site destination access, real inbox
 receipt, current VPS provider inference and physical acquisition remain acceptance
 checks to perform in their configured environments; unit-test fixtures never certify them.
+
+
+## Boolean observations and photo withdrawal
+
+A measurement location can use either a DC voltage range or an expected digital state.
+In **Schematic and prior criteria**, select **Digital state (true/false)**, name the
+actual connection or observation and explicitly choose the expected state. `false` is
+a complete criterion, not a missing value. State the operating condition in the functional
+description (for example, "alarm remains false with no obstacle"). Voltage points retain
+their existing numeric bounds. Specifications remain frozen after analysis.
+
+For a requested boolean point, **Record reading** offers true/false instead of a voltage
+field. Confirm the actual observation and condition. The API uses native JSON booleans
+with `unit: "boolean"`; PostgreSQL stores them in a separate nullable Boolean column.
+A boolean is never converted into 0 V or 1 V. A passing state or voltage alone cannot
+replace the functional test required to finish an investigation.
+
+USB acquisition uses `action: "read_digital"` on protocol version 1, with the same command,
+point, sample and deadline validation as voltage acquisition. Update the instrument
+firmware before using this action. The included UNO instrument reads **TP1=A0, TP2=A1,
+TP3=A2**, without enabling pull-ups or driving the circuit. It returns `true` for HIGH,
+`false` for LOW, and rejects a changing signal rather than averaging it. Its 20 samples
+span a short acquisition window, not the entire functional observation. Confirm electrical
+compatibility, a driven input and common ground; a floating input is not evidence of a
+meaningful program state. This firmware is a separate read-only instrument: it does not
+automatically inspect variables inside the Arduino/ESP32 being diagnosed. To transmit
+an internal program variable, that board's firmware must explicitly implement the protocol
+and report the actual variable. Browser USB still requires a supported desktop browser;
+the mobile application supports manual recording. Compile the supplied UNO firmware:
+
+```bash
+python3 -m venv .tools/pio-env
+.tools/pio-env/bin/python -m pip install platformio==6.1.19
+PLATFORMIO_CORE_DIR="$PWD/.tools/platformio-core" .tools/pio-env/bin/python -m platformio run --project-dir firmware/instrument_node
+```
+
+A session owner can **Delete photo** from **Circuit details and evidence**. Confirming
+removes access to the image and deletes its live stored file; the ID, hash, withdrawal
+event and prior analysis history are retained. If analysis has already used the session,
+current conclusions are discarded, outstanding readings are cancelled and the session
+returns to review before another analysis. Withdrawal is blocked while a job is active.
+Removed photos and invalidated hypotheses are excluded from new model inputs. Historical
+reports remain historical records; withdrawal is not a repair verification. If file
+cleanup fails after access is revoked, retry deletion to complete cleanup.
+
+Migration `0009` adds withdrawal timestamps, nullable voltage values and the Boolean
+column without deleting existing voltage observations. Downgrade refuses to proceed if
+boolean observations or withdrawn photos exist.
+
+## Automatic deployment from main
+
+The `quality` GitHub Actions workflow checks the backend on SQLite and PostgreSQL, applies
+migrations to an isolated PostgreSQL service, runs bridge and USB protocol tests, checks
+Flutter and builds the production website. Deployment requires all jobs to succeed.
+The APK distributed with the site remains the signed release committed under `releases/android`;
+CI does not have the Android signing key.
+
+Automatic deployment is **disabled until the one-time setup below is complete**. It
+publishes only pushes to `main`, using the exact public artifact built and checked in
+that workflow run. Pull requests never receive production SSH credentials. A restricted
+SSH key can invoke only the CircuitLab deployment gateway, not an interactive shell.
+
+### One-time setup
+
+First commit/push these changes and bootstrap the gateway on the VPS using the existing
+manual update procedure. Keep `CIRCUITLAB_AUTO_DEPLOY` unset during this first update:
+
+```bash
+cd /var/www/circuitlab
+git status --short
+git pull --ff-only origin main
+cd apps/client
+flutter pub get --enforce-lockfile
+flutter build web --release --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1
+cd ../..
+python3 scripts/build_site.py
+python3 scripts/deploy_vps.py --check
+python3 scripts/deploy_vps.py --apply
+curl --fail --silent --show-error https://circuitlab.doc-ia.cloud/api/v1/health/ready
+```
+
+Resolve any tracked VPS changes before pulling; the gateway refuses a dirty checkout.
+Do not discard private configuration or reset application data.
+
+1. On your workstation, create a dedicated deployment SSH key **outside the repository**.
+   Do not reuse your personal key, paste its private part into chat or commit it.
+   For example, in PowerShell:
+
+   ```powershell
+   ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\circuitlab_actions" -C "circuitlab-actions"
+   ```
+
+   Use an empty passphrase for this dedicated non-interactive key. Put its private
+   contents only in the GitHub environment secret described below.
+2. On the VPS, use the existing project deployment account. It must own/write
+   `/var/www/circuitlab`, access its Git origin and run this project's Docker Compose.
+   Append **one** line to that account's `~/.ssh/authorized_keys`, replacing the public
+   key placeholder with the generated `.pub` content:
+
+   ```text
+   restrict,command="/usr/bin/python3 /var/www/circuitlab/scripts/deploy_gateway.py" ssh-ed25519 PUBLIC_KEY_BASE64 circuitlab-actions
+   ```
+
+   Preserve existing SSH keys. Keep `~/.ssh` mode 700 and `authorized_keys` mode 600.
+   The gateway is limited to Linux `/var/www/circuitlab`; it does not edit Nginx,
+   Certbot, PM2 or other projects. The authorized deployment account controls Docker
+   and the project, so protect this key accordingly.
+3. From the trusted server console, obtain and verify the server's public host key:
+
+   ```bash
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   awk '{print "circuitlab-vps " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+   Store the second command's **public** line as `CIRCUITLAB_SSH_KNOWN_HOSTS`.
+   The SSH client pins it under the `circuitlab-vps` alias even with a nonstandard port.
+4. In GitHub **Settings → Environments**, create `production`, restrict deployment
+   branches to `main`, and add these environment secrets:
+
+   | Secret | Value |
+   | --- | --- |
+   | `CIRCUITLAB_SSH_HOST` | VPS hostname or IP, without a URL scheme |
+   | `CIRCUITLAB_SSH_USER` | The account configured above |
+   | `CIRCUITLAB_SSH_PORT` | SSH port; optional, defaults to 22 |
+   | `CIRCUITLAB_SSH_KEY` | The dedicated private key |
+   | `CIRCUITLAB_SSH_KNOWN_HOSTS` | The verified public host key line |
+
+   Do not require a manual environment approval if you want fully automatic deployment.
+   Protect `main` with the `backend`, `flutter` and `firmware` quality jobs as required
+   checks before merging.
+5. In **Settings → Secrets and variables → Actions → Variables**, create the repository
+   variable `CIRCUITLAB_AUTO_DEPLOY` with value `true`. The next push to `main` runs
+   checks and, if they pass, deploys. Inspect the `quality` run and its deployment
+   result before relying on it. Setting the variable back to `false` disables future
+   automatic deployments; it does not interrupt one already running.
+
+The gateway validates the artifact checksum, manifest and paths before updating the
+checkout; rejects an outdated commit, local tracked changes or a non-fast-forward update;
+and takes a project lock shared with manual deployment. It uses a per-commit backend
+image, creates the existing pre-migration PostgreSQL backup, migrates and verifies
+the API and worker before switching the public website to its staged release.
+It then checks HTTPS readiness, API commit identity and `/release.json`.
+
+If public verification fails, the previous website pointer is restored. **Database
+migrations and backend containers are not automatically rolled back.** Inspect the
+project logs and deploy a reviewed corrective commit; never automatically downgrade
+a database containing new data. Private backups and public release directories are
+retained for recovery; monitor disk use and apply a reviewed retention policy.
+
+After activation, the workflow ships the already built website; Flutter does not need
+to build on the VPS for each push. Avoid running `build_site.py` over an active release
+symlink during CI deployment. No GitHub settings, SSH keys or VPS configuration are
+created by merely pulling this repository.

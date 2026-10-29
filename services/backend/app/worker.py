@@ -2,7 +2,8 @@ import logging
 import time
 from sqlalchemy import and_, or_, select
 from app.config import settings
-from app.catalog import localized_voltage_test
+from app.catalog import localized_voltage_test, localized_digital_test
+from app.measurements import point_check, point_is_boolean
 from app.db import (
     Command,
     Evidence,
@@ -65,7 +66,7 @@ def snapshot(db, session):
         "supply_v": session.supply_v,
         "specification": session.specification,
         "evidence": [
-            serialize(e) for e in db.scalars(select(Evidence).where(Evidence.session_id == session.id))
+            serialize(e) for e in db.scalars(select(Evidence).where(Evidence.session_id == session.id, Evidence.removed_at.is_(None)))
         ],
         "measurements": [
             serialize(m)
@@ -77,8 +78,9 @@ def snapshot(db, session):
         ],
         "previous_hypotheses": [
             h.data for h in db.scalars(select(Hypothesis).where(Hypothesis.session_id == session.id))
+            if not h.data.get("withdrawn_context")
         ],
-        "test_catalog": [localized_voltage_test(session.language)],
+        "test_catalog": [localized_voltage_test(session.language), localized_digital_test(session.language)],
         "connection_confirmations": [
             e.data
             for e in db.scalars(
@@ -101,8 +103,12 @@ def validate_plan(output, context):
     allowed_points = {p["id"] for p in context["specification"]["points"]}
     if output.point_id is not None and output.point_id not in allowed_points:
         raise ValueError("Punto solicitado fuera del esquema autorizado")
-    if output.action in {"read_voltage", "request_manual_measurement"} and output.point_id is None:
+    if output.action in {"read_voltage", "read_digital", "request_manual_measurement"} and output.point_id is None:
         raise ValueError("Una medición requiere un punto autorizado")
+    if output.action in {"read_voltage", "read_digital"} and output.point_id is not None:
+        point = next(p for p in context["specification"]["points"] if p["id"] == output.point_id)
+        if point_is_boolean(point) != (output.action == "read_digital"):
+            raise ValueError("The requested procedure does not match the authorized observation type")
     if output.action == "propose_intervention" and not any(
         measurements.intersection(h.evidence_ids) for h in output.hypotheses
     ):
@@ -118,20 +124,7 @@ def evaluate(db, session):
         )
     )
     latest = {m.point_id: m for m in readings if m.measured_at >= session.pending_test["after"]}
-    checks = []
-    for point in session.specification["points"]:
-        reading = latest.get(point["id"])
-        checks.append(
-            {
-                "point_id": point["id"],
-                "min_v": point["min_v"],
-                "max_v": point["max_v"],
-                "measurement_id": reading.id if reading else None,
-                "value": reading.value if reading else None,
-                "source": reading.source if reading else None,
-                "passed": bool(reading and point["min_v"] <= reading.value <= point["max_v"]),
-            }
-        )
+    checks = [point_check(point, latest.get(point["id"])) for point in session.specification["points"]]
     functional = functional_result(db, session)
     electrical_passed = all(c["passed"] for c in checks)
     passed = electrical_passed and bool(functional and functional["passed"])
@@ -236,6 +229,7 @@ def process(job_id, lease_token):
                     "request_additional_view": "awaiting_evidence",
                     "request_connection_confirmation": "awaiting_confirmation",
                     "read_voltage": "awaiting_measurement",
+                    "read_digital": "awaiting_measurement",
                     "request_manual_measurement": "awaiting_measurement",
                     "propose_intervention": "awaiting_intervention",
                     "inconclusive": "inconclusive",

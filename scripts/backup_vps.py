@@ -229,7 +229,10 @@ def rehearse_restore(directory):
                 ],
                 stdin=source,
             )
-        query = "SELECT COALESCE(json_agg(json_build_object('key',key,'sha256',sha256)), '[]'::json) FROM evidence"
+        # Restore and inspect EVERY evidence row, including withdrawn history.
+        # Older snapshots lack removed_at, so read it through to_jsonb.
+        query = ("SELECT COALESCE(json_agg(json_build_object('key',key,'sha256',sha256,"
+                 "'removed_at',to_jsonb(evidence)->>'removed_at')), '[]'::json) FROM evidence")
         rows = json.loads(
             execute(
                 [
@@ -248,13 +251,17 @@ def rehearse_restore(directory):
             )
         )
         for row in rows:
+            # A withdrawn photo intentionally has no live file; its DB history remains restored.
+            if row.get("removed_at") is not None:
+                continue
             if inventory.get(row["key"]) != row["sha256"]:
                 raise ValueError(
                     "Restored database references missing or changed evidence"
                 )
         return {
             "database_restored": True,
-            "referenced_images_verified": len(rows),
+            "referenced_images_verified": sum(row.get("removed_at") is None for row in rows),
+            "evidence_records_restored": len(rows),
             "isolated_network": True,
         }
     finally:

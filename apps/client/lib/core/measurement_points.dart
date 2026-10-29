@@ -2,6 +2,7 @@ const measurementPointKinds = <String, String>{
   'supply': 'measurementKindSupply',
   'sensor_signal': 'measurementKindSensor',
   'dc_output': 'measurementKindDcOutput',
+  'digital_state': 'measurementKindDigital',
   'custom': 'measurementKindCustom',
 };
 
@@ -31,3 +32,12 @@ String measurementPointName(
   }
   return id;
 }
+
+Map measurementPoint(Map specification, dynamic pointId) =>
+    (specification['points'] as List? ?? []).cast<Map>().firstWhere(
+      (point) => point['id'] == pointId,
+      orElse: () => {},
+    );
+
+bool booleanPoint(Map specification, dynamic pointId) =>
+    measurementPoint(specification, pointId)['value_kind'] == 'boolean';

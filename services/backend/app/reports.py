@@ -84,6 +84,16 @@ def render_markdown(report, language, *, technical_details=False):
             rendered = "0"
         return rendered.replace(".", ",") if language == "es" else rendered
 
+    def render_observation(value, unit="V"):
+        if unit == "boolean":
+            return "—" if value is None else "true" if value is True else "false"
+        return f"{number(value)} V"
+
+    def criterion(point):
+        if point.get("value_kind") == "boolean" or point.get("unit") == "boolean":
+            return text("Estado esperado: ", "Expected state: ") + render_observation(point.get("expected_state"), "boolean")
+        return f"{number(point['min_v'])}–{number(point['max_v'])} V"
+
     yes, no = text("Sí", "Yes"), text("No", "No")
     lines = [
         f"# CircuitLab AI · {text('Reporte de sesión', 'Session report')}",
@@ -115,10 +125,17 @@ def render_markdown(report, language, *, technical_details=False):
     for connection in report["specification"].get("connections", []):
         lines.append("- " + safe_text(connection))
     for point in report["specification"].get("points", []):
-        lines.append(f"- {point['id']} · {safe_text(point['label'])}: {number(point['min_v'])}–{number(point['max_v'])} V")
+        lines.append(f"- {point['id']} · {safe_text(point['label'])}: {criterion(point)}")
     lines += ["", f"## {text('Evidencia', 'Evidence')}"]
     for item in report["evidence"]:
         lines.append(f"- {item['id']} · {item['mime']} · SHA-256: {item['sha256']}")
+    for item in report.get("removed_evidence", []):
+        lines.append(f"- {text('RETIRADA', 'WITHDRAWN')}: {item['id']} · SHA-256: {item['sha256']}")
+    if report.get("evidence_review_required"):
+        lines += ["", text(
+            "Evidencia retirada: las conclusiones anteriores son históricas y requieren un nuevo análisis.",
+            "Evidence was withdrawn: previous conclusions are historical and require a new analysis.",
+        )]
     lines += ["", f"## {text('Observaciones e hipótesis', 'Observations and hypotheses')}"]
     for run in report["model_runs"]:
         for observation in localized_text(run["data"].get("output", {}), "observations", language) or []:
@@ -161,7 +178,7 @@ def render_markdown(report, language, *, technical_details=False):
             else text("Diagnóstico", "Diagnosis")
         )
         lines.append(
-            f"- {item['point_id']}: {number(item['value'])} V · {label(item['source'], language)} · {phase} · {timestamp(item['measured_at'])} · {item['id']}"
+            f"- {item['point_id']}: {render_observation(item['value'], item.get('unit', 'V'))} · {label(item['source'], language)} · {phase} · {timestamp(item['measured_at'])} · {item['id']}"
         )
     lines += ["", f"## {text('Intervenciones', 'Interventions')}"]
     for item in report["interventions"]:
@@ -189,7 +206,7 @@ def render_markdown(report, language, *, technical_details=False):
         lines.append(f"- {text('Origen de las lecturas', 'Reading source')}: {safe_text(data.get('verification_basis', 'legacy'))}")
         for check in data["checks"]:
             lines.append(
-                f"  - {check['point_id']}: {number(check['value'])} V / {number(check['min_v'])}–{number(check['max_v'])} V · {label(check['source'], language)}"
+                f"  - {check['point_id']}: {render_observation(check['value'], check.get('unit', 'V'))} / {criterion(check)} · {label(check['source'], language)}"
             )
     for story in report.get("storyboards", []):
         if not story.get("data"):

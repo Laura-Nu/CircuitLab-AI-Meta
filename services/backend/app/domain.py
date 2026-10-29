@@ -81,7 +81,12 @@ def enqueue(db, session, kind="analysis"):
 
 
 def serialize(row):
-    return {col.name: getattr(row, col.name) for col in row.__table__.columns}
+    result = {col.name: getattr(row, col.name) for col in row.__table__.columns}
+    if row.__tablename__ == "measurements":
+        from app.measurements import reading_value
+        result["value"] = reading_value(row)
+        result.pop("boolean_value", None)
+    return result
 
 
 def commit(db):

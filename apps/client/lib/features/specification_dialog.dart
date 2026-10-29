@@ -19,14 +19,19 @@ class SpecificationDialog extends StatefulWidget {
 class _PointFields {
   final String id;
   String kind;
+  bool? expectedState;
+  bool get isBoolean => kind == 'digital_state';
   final TextEditingController label;
   final TextEditingController minimum;
   final TextEditingController maximum;
   _PointFields(Map<String, dynamic> point)
     : id = point['id'] as String,
-      kind = measurementPointKinds.containsKey(point['kind'])
+      kind = point['value_kind'] == 'boolean'
+          ? 'digital_state'
+          : measurementPointKinds.containsKey(point['kind'])
           ? point['kind'] as String
           : 'custom',
+      expectedState = point['expected_state'] as bool?,
       label = TextEditingController(text: point['label']?.toString() ?? ''),
       minimum = TextEditingController(
         text: point['min_v'] is num ? formatNumber(point['min_v'] as num) : '',
@@ -141,6 +146,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
           decoration: InputDecoration(
             label: RequiredLabel(tr('measurementLocation')),
             hintText: tr('measurementLocationHint'),
+            hintMaxLines: 2,
             counterText: '',
           ),
           validator: (value) => !unused(point) && (value ?? '').trim().isEmpty
@@ -190,7 +196,38 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               onChanged: (value) => setState(() => point.kind = value!),
             ),
             const SizedBox(height: 12),
-            if (contentWidth < 480) ...[
+            if (point.isBoolean) ...[
+              label,
+              const SizedBox(height: 12),
+              DropdownButtonFormField<bool>(
+                isExpanded: true,
+                isDense: false,
+                key: ValueKey('${point.id}-expected-state'),
+                initialValue: point.expectedState,
+                decoration: InputDecoration(
+                  label: RequiredLabel(tr('booleanExpectedValue')),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: true,
+                    child: Text(tr('booleanTrue'), maxLines: 2),
+                  ),
+                  DropdownMenuItem(
+                    value: false,
+                    child: Text(tr('booleanFalse'), maxLines: 2),
+                  ),
+                ],
+                onChanged: (value) =>
+                    setState(() => point.expectedState = value),
+                validator: (value) =>
+                    value == null ? tr('fieldRequired') : null,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                tr('booleanCriterionHelp'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ] else if (contentWidth < 480) ...[
               label,
               const SizedBox(height: 10),
               Row(
@@ -218,6 +255,45 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
     ),
   );
 
+  Widget section(String title, String help) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr(title), style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        Text(tr(help), style: Theme.of(context).textTheme.bodySmall),
+      ],
+    ),
+  );
+
+  Widget example() => ExpansionTile(
+    key: const ValueKey('specification-example'),
+    tilePadding: EdgeInsets.zero,
+    childrenPadding: const EdgeInsets.only(bottom: 16),
+    leading: const Icon(Icons.lightbulb_outline, size: 20),
+    title: Text(tr('specificationExampleTitle')),
+    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final pair in [
+        ('specificationExampleWiringTitle', 'specificationExampleWiring'),
+        ('specificationExampleLocationsTitle', 'specificationExampleLocations'),
+        ('specificationExampleLimitsTitle', 'specificationExampleLimits'),
+      ])
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr(pair.$1), style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 4),
+              Text(tr(pair.$2), style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+    ],
+  );
+
   void submit() {
     if (!formKey.currentState!.validate()) return;
     final defined = points.where((point) => !unused(point)).toList();
@@ -238,8 +314,12 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             'id': point.id,
             'kind': point.kind,
             'label': point.label.text.trim(),
-            'min_v': voltage(point.minimum.text),
-            'max_v': voltage(point.maximum.text),
+            'value_kind': point.isBoolean ? 'boolean' : 'voltage',
+            if (point.isBoolean) 'expected_state': point.expectedState,
+            if (!point.isBoolean) ...{
+              'min_v': voltage(point.minimum.text),
+              'max_v': voltage(point.maximum.text),
+            },
           },
       ],
     });
@@ -261,13 +341,17 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             children: [
               const RequiredFieldsNotice(),
               Text(tr('physicallyConfirmTheConnectionsDefineTheRangesThat')),
-              const SizedBox(height: 18),
+              example(),
+              const SizedBox(height: 14),
+              section('specificationWiringTitle', 'specificationWiringHelp'),
               TextFormField(
                 controller: connections,
                 minLines: 3,
                 maxLines: 6,
                 decoration: InputDecoration(
                   label: RequiredLabel(tr('confirmedConnectionsOnePerLine')),
+                  hintText: tr('specificationWiringPlaceholder'),
+                  hintMaxLines: 3,
                 ),
                 validator: (value) {
                   final lines = (value ?? '')
@@ -278,7 +362,11 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                       : null;
                 },
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 22),
+              section(
+                'specificationOperationTitle',
+                'specificationOperationHelp',
+              ),
               TextFormField(
                 controller: description,
                 minLines: 2,
@@ -286,13 +374,16 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 maxLength: 1000,
                 decoration: InputDecoration(
                   label: RequiredLabel(tr('functionalTestCondition')),
+                  hintText: tr('specificationOperationPlaceholder'),
+                  hintMaxLines: 3,
                 ),
                 validator: (value) => (value ?? '').trim().length < 5
                     ? tr('functionalDescriptionRequired')
                     : null,
               ),
-              const SizedBox(height: 18),
-              Text(tr('measurementPointHelp')),
+              const SizedBox(height: 22),
+              section('specificationLocationsTitle', 'measurementPointHelp'),
+              Text(tr('specificationExpectedLimitsHelp')),
               const SizedBox(height: 12),
               Text(tr('testPointRequiredNotice')),
               const SizedBox(height: 12),

@@ -4,6 +4,14 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "La foto fue retirada; vuelve a intentar para completar el borrado del archivo": (
+        "evidence_cleanup_pending",
+        "The photo was withdrawn; retry deletion to finish removing the stored file",
+    ),
+    "Espera a que termine el análisis antes de eliminar la foto": ("evidence_busy", "Wait for active analysis to finish before deleting the photo"),
+    "La imagen fue eliminada; adjúntala con un identificador nuevo": ("evidence_removed", "The image was deleted; attach it with a new identifier"),
+    "La unidad no coincide con el tipo de medición del esquema": ("measurement_type_mismatch", "The unit does not match the observation type in the specification"),
+
     'Registra un instrumento USB del navegador': ('browser_usb_device_required', 'Register a browser USB instrument'),
     'La conexión USB venció; vuelve a conectar': ('browser_usb_expired', 'The USB connection expired; reconnect the instrument'),
     'Este instrumento está conectado en otra pestaña': ('browser_usb_in_use', 'This instrument is connected in another tab'),
@@ -178,6 +186,7 @@ LABELS = {
     "simulated": ("Simulada", "Simulated"),
     "led_resistor": ("LED + resistencia", "LED + resistor"),
     "voltage_divider": ("Divisor resistivo", "Voltage divider"),
+    "digital_signal": ("Señal lógica digital", "Digital logic signal"),
     "analog_sensor": ("Sensor analógico", "Analog sensor"),
     "proposed": ("Propuesta", "Proposed"),
     "compatible": ("Compatible", "Compatible"),

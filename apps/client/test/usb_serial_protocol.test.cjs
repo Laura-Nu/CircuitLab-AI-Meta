@@ -140,3 +140,29 @@ test('A synchronous open error does not leave a permanently busy state',async()=
   assert.equal(JSON.parse(await f.api.connect()).status,'connected');
   await f.api.disconnect();
 });
+
+for (const value of [true, false]) {
+  test('Digital USB preserves native boolean '+value, async()=>{
+    const f=fixture((c,input)=>send(input,{...good(c),value,unit:'boolean'}));
+    await f.api.connect();
+    const result=JSON.parse(await f.api.read(JSON.stringify({...command,action:'read_digital'}),'["TP1"]'));
+    assert.equal(result.status,'ok');assert.equal(result.value,value);
+    await f.api.disconnect();
+  });
+}
+for (const changes of [{value:0,unit:'boolean'},{value:1,unit:'boolean'},
+                       {value:'false',unit:'boolean'},{value:false,unit:'V'},{value:false}]) {
+  test('Digital USB rejects ambiguous type/unit '+JSON.stringify(changes),async()=>{
+    const f=fixture((c,input)=>send(input,{...good(c),...changes}));
+    await f.api.connect();
+    const result=JSON.parse(await f.api.read(JSON.stringify({...command,action:'read_digital'}),'["TP1"]'));
+    assert.notEqual(result.status,'ok');assert.equal(result.value,undefined);
+    await f.api.disconnect();
+  });
+}
+test('A boolean is never accepted as a voltage',async()=>{
+  const f=fixture((c,input)=>send(input,{...good(c),value:false}));
+  await f.api.connect();
+  const result=JSON.parse(await f.api.read(JSON.stringify(command),'["TP1"]'));
+  assert.notEqual(result.status,'ok');await f.api.disconnect();
+});

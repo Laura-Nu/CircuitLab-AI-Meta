@@ -343,7 +343,7 @@ class _RecordedFact extends StatelessWidget {
     switch (kind) {
       case 'measurement':
         lines.add(
-          '${data['point_id']}: ${strings.number(data['value'] as num)} V · ${strings.label(data['source'])}',
+          '${data['point_id']}: ${strings.observation(data['value'], data['unit'])} · ${strings.label(data['source'])}',
         );
         if (data['calibration_id'] != null) {
           lines.add(
@@ -366,7 +366,7 @@ class _RecordedFact extends StatelessWidget {
         }
         for (final point in check['checks'] as List? ?? []) {
           lines.add(
-            '${point['point_id']}: ${point['value'] is num ? strings.number(point['value'] as num) : point['value']} V / ${point['min_v'] is num ? strings.number(point['min_v'] as num) : point['min_v']}–${point['max_v'] is num ? strings.number(point['max_v'] as num) : point['max_v']} V',
+            '${point['point_id']}: ${strings.observation(point['value'], point['unit'])} / ${strings.criterion(point)}',
           );
         }
       case 'intervention':
@@ -374,9 +374,7 @@ class _RecordedFact extends StatelessWidget {
       case 'specification':
         lines.add(data['expected'].toString());
         for (final point in data['specification']['points'] as List? ?? []) {
-          lines.add(
-            '${point['id']}: ${point['min_v'] is num ? strings.number(point['min_v'] as num) : point['min_v']}–${point['max_v'] is num ? strings.number(point['max_v'] as num) : point['max_v']} V',
-          );
+          lines.add('${point['id']}: ${strings.criterion(point)}');
         }
       case 'decision':
         final output = data['output'] as Map;

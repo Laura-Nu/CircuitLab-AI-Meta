@@ -65,14 +65,21 @@ class SessionResults extends StatelessWidget {
             if (latest != null) ...[
               const SizedBox(height: 8),
               Text(
-                strings.t('latestRecordedReading', {
-                  'point': measurementPointName(
-                    specification,
-                    latest['point_id'],
-                  ),
-                  'value': strings.number(latest['value'] as num),
-                  'source': strings.label(latest['source']),
-                }),
+                strings.t(
+                  latest['unit'] == 'boolean'
+                      ? 'latestRecordedBoolean'
+                      : 'latestRecordedReading',
+                  {
+                    'point': measurementPointName(
+                      specification,
+                      latest['point_id'],
+                    ),
+                    'value': latest['unit'] == 'boolean'
+                        ? strings.booleanValue(latest['value'])
+                        : strings.number(latest['value'] as num),
+                    'source': strings.label(latest['source']),
+                  },
+                ),
               ),
             ] else ...[
               const SizedBox(height: 8),

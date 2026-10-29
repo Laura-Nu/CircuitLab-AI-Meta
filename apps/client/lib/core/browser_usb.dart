@@ -149,7 +149,7 @@ class BrowserUsbController extends ChangeNotifier {
           'status': reading['status'],
           'sample_count': reading['sample_count'],
           'value': reading['status'] == 'ok' ? reading['value'] : null,
-          'unit': 'V',
+          'unit': command['action'] == 'read_digital' ? 'boolean' : 'V',
           'source': 'instrumented',
           'calibration_id': _calibration,
           'measured_at':

@@ -38,8 +38,10 @@ def source_snapshot(db, session):
         (Measurement, "measurement", 50), (Intervention, "intervention", 5),
         (Verification, "verification", 5),
     ):
-        rows = list(db.scalars(select(model).where(model.session_id == session.id)
-                               .order_by(model.created_at.desc(), model.id.desc()).limit(limit)))
+        query = select(model).where(model.session_id == session.id)
+        if model is Evidence:
+            query = query.where(Evidence.removed_at.is_(None))
+        rows = list(db.scalars(query.order_by(model.created_at.desc(), model.id.desc()).limit(limit)))
         for row in reversed(rows):
             data = serialize(row)
             data.pop("session_id", None)

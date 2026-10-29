@@ -47,6 +47,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
     'led_resistor': tr('ledResistor'),
     'voltage_divider': tr('voltageDivider'),
     'analog_sensor': tr('analogSensor'),
+    'digital_signal': tr('digitalSignal'),
   };
   Map<String, String> get states => {
     'draft': tr('draft'),
@@ -1193,6 +1194,19 @@ class _WorkbenchState extends ConsumerState<Workbench>
           style: TextStyle(color: muted, fontSize: 12),
         ),
         SizedBox(height: 20),
+        if (s['evidence_review_required'] == true) ...[
+          box(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                const SizedBox(width: 12),
+                Expanded(child: Text(tr('evidenceReviewRequired'))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         SessionGuidance(
           session: s,
           busy: busy,
@@ -1342,11 +1356,31 @@ class _WorkbenchState extends ConsumerState<Workbench>
                       runSpacing: 12,
                       children: [
                         for (final e in s['evidence'])
-                          EvidenceThumbnail(
-                            key: ValueKey('${s['id']}:${e['id']}'),
-                            api: api,
-                            sessionId: s['id'],
-                            evidence: e,
+                          SizedBox(
+                            key: ValueKey('photo-tile-${e['id']}'),
+                            width: 190,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                EvidenceThumbnail(
+                                  key: ValueKey('${s['id']}:${e['id']}'),
+                                  api: api,
+                                  sessionId: s['id'],
+                                  evidence: e,
+                                ),
+                                if (editable)
+                                  TextButton.icon(
+                                    onPressed: busy || analyzing
+                                        ? null
+                                        : () => removeEvidence(e),
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                    ),
+                                    label: Text(tr('removeEvidence')),
+                                  ),
+                              ],
+                            ),
                           ),
                       ],
                     ),
@@ -1429,15 +1463,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 Padding(
                   padding: EdgeInsets.only(bottom: 8),
                   child: Text(
-                    tr('namedPointCriterion', {
-                      'name': measurementPointName(
-                        s['specification'],
-                        p['id'],
-                        includeReference: api.isAdmin,
-                      ),
-                      'min': p['min_v'],
-                      'max': p['max_v'],
-                    }),
+                    '${measurementPointName(s['specification'], p['id'], includeReference: api.isAdmin)} / ${AppStrings.of(context).criterion(p)}',
                     style: TextStyle(color: muted),
                   ),
                 ),
@@ -1465,7 +1491,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
                         ),
                       ),
                       Text(
-                        '${AppStrings.of(context).number(m['value'] as num)} V',
+                        AppStrings.of(
+                          context,
+                        ).observation(m['value'], m['unit']),
                         style: TextStyle(fontFamily: 'monospace', fontSize: 18),
                       ),
                       badge(
@@ -1580,6 +1608,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'investigation_closed': tr('investigationClosed'),
         'baseline_assessment_completed': tr('baselineAssessmentCompleted'),
         'baseline_functional_check_recorded': tr('baselineFunctionalRecorded'),
+        'evidence_removed': tr('evidenceRemovedEvent'),
         'session_created': tr('sessionCreated'),
         'specification_confirmed': tr('schematicAndCriteriaConfirmed'),
         'evidence_added': tr('imageAttached'),
@@ -1875,6 +1904,31 @@ class _WorkbenchState extends ConsumerState<Workbench>
     });
   }
 
+  Future<void> removeEvidence(dynamic evidence) async {
+    final session = selected!;
+    final accepted = await dialog(
+      tr('removeEvidence'),
+      Text(
+        tr(
+          session['analysis_steps'] > 0
+              ? 'removeEvidenceAnalyzedHelp'
+              : 'removeEvidenceHelp',
+        ),
+      ),
+      tr('confirmRemoveEvidence'),
+    );
+    if (accepted == true) {
+      await action(() async {
+        await api.request(
+          '/sessions/${session['id']}/evidence/${evidence['id']}',
+          method: 'DELETE',
+          data: {'version': session['version'], 'confirmed': true},
+        );
+        toast(tr('evidenceRemoved'));
+      });
+    }
+  }
+
   Future<void> measure() async {
     final s = selected!;
     final points = (s['specification']['points'] as List)
@@ -1887,6 +1941,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
               points.first;
     final value = TextEditingController();
     bool confirmed = false;
+    bool? observedState;
+    bool digital() => booleanPoint(s['specification'], point);
     final accepted = await dialog(
       tr('recordManualVoltage'),
       StatefulBuilder(
@@ -1912,10 +1968,37 @@ class _WorkbenchState extends ConsumerState<Workbench>
               ],
               onChanged: s['state'] == 'awaiting_measurement'
                   ? null
-                  : (p) => update(() => point = p!),
+                  : (p) => update(() {
+                      point = p!;
+                      value.clear();
+                      observedState = null;
+                    }),
             ),
             SizedBox(height: 16),
-            field(value, tr('readingInV05'), numeric: true),
+            if (digital())
+              DropdownButtonFormField<bool>(
+                isExpanded: true,
+                isDense: false,
+                key: const ValueKey('boolean-observed-value'),
+                initialValue: observedState,
+                decoration: InputDecoration(
+                  label: RequiredLabel(tr('booleanObservedValue')),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: true,
+                    child: Text(tr('booleanTrue'), maxLines: 2),
+                  ),
+                  DropdownMenuItem(
+                    value: false,
+                    child: Text(tr('booleanFalse'), maxLines: 2),
+                  ),
+                ],
+                validator: (v) => v == null ? tr('fieldRequired') : null,
+                onChanged: (v) => update(() => observedState = v),
+              )
+            else
+              field(value, tr('readingInV05'), numeric: true),
             SizedBox(height: 16),
             CheckboxListTile(
               subtitle: Text(tr('requiredField')),
@@ -1923,7 +2006,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
               onChanged: (v) => update(() => confirmed = v!),
               contentPadding: EdgeInsets.zero,
               title: Text(
-                tr('iConfirmTheInstrumentRangeCommonGndAnd'),
+                tr(
+                  digital()
+                      ? 'confirmBooleanObservationConditions'
+                      : 'iConfirmTheInstrumentRangeCommonGndAnd',
+                ),
                 style: TextStyle(fontSize: 13),
               ),
             ),
@@ -1942,8 +2029,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
         final synced = await api.saveMeasurement(s['id'], {
           'client_id': clientId(),
           'point_id': point,
-          'value': double.tryParse(value.text.replaceAll(',', '.')),
-          'unit': 'V',
+          'value': digital()
+              ? observedState
+              : double.tryParse(value.text.replaceAll(',', '.')),
+          'unit': digital() ? 'boolean' : 'V',
           'conditions_confirmed': true,
           'measured_at': DateTime.now().millisecondsSinceEpoch / 1000,
         });

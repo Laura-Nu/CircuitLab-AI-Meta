@@ -58,6 +58,8 @@ from app.reports import prepare_report, render_markdown
 from app.accounts import router as accounts_router, public_user
 from app.metrics import router as metrics_router
 from app import stories
+from app.evidence import router as evidence_router, review_required
+from app.measurements import observation_fields, point_unit
 from app.inference import image_limit
 from app.operations import functional_result, operational_status, validate_runtime
 
@@ -71,11 +73,12 @@ async def lifespan(app):
 app = FastAPI(title="CircuitLab AI", version="0.1.0", lifespan=lifespan)
 app.include_router(accounts_router)
 app.include_router(metrics_router)
+app.include_router(evidence_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings().app_origin],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept-Language"],
 )
 prefix = "/api/v1"
@@ -312,8 +315,16 @@ def details(db, session):
         ("verifications", Verification),
         ("jobs", Job),
     ]:
-        rows = db.scalars(select(model).where(model.session_id == session.id).order_by(model.created_at))
+        query = select(model).where(model.session_id == session.id)
+        if model is Evidence:
+            query = query.where(Evidence.removed_at.is_(None))
+        rows = db.scalars(query.order_by(model.created_at))
         result[key] = [serialize(row) for row in rows]
+    result["evidence_review_required"] = review_required(db, session.id)
+    result["removed_evidence"] = [{
+        "id": e.id, "sha256": e.sha256, "removed_at": e.removed_at,
+    } for e in db.scalars(select(Evidence).where(
+        Evidence.session_id == session.id, Evidence.removed_at.is_not(None)))]
     result["completion"] = completion_status(db, session)
     return result
 
@@ -406,9 +417,9 @@ def specification(
         or session.analysis_steps
     ):
         raise HTTPException(409, "Los criterios quedan fijados al iniciar el diagnóstico")
-    if any(p.max_v > session.supply_v for p in body.points):
+    if any(p.max_v is not None and p.max_v > session.supply_v for p in body.points):
         raise HTTPException(422, "El criterio supera la alimentación declarada")
-    session.specification = body.model_dump(exclude={"version"})
+    session.specification = body.model_dump(exclude={"version"}, exclude_none=True)
     session.spec_version += 1
     record(
         db,
@@ -435,11 +446,13 @@ async def upload(
         select(Evidence).where(Evidence.session_id == session_id, Evidence.client_id == client_id)
     )
     if existing:
+        if existing.removed_at is not None:
+            raise HTTPException(409, "La imagen fue eliminada; adjúntala con un identificador nuevo")
         return serialize(existing)
     if session.state in {"resolved", "no_fault_found", "cancelled", "inconclusive", "analyzing", "awaiting_functional_check"}:
         raise HTTPException(409, "La sesión no admite evidencia en este estado")
     limit = image_limit(settings()) if session.diagnosis_mode == "meta" else 12
-    if len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id)))) >= limit:
+    if len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id, Evidence.removed_at.is_(None))))) >= limit:
         raise HTTPException(422, "Máximo 8 imágenes con este proveedor" if limit == 8 else "Máximo 12 imágenes por sesión")
     raw = await file.read(settings().max_upload_mb * 1024 * 1024 + 1)
     if len(raw) > settings().max_upload_mb * 1024 * 1024:
@@ -448,7 +461,7 @@ async def upload(
     # Lock the owner across all investigations so concurrent uploads share one quota.
     db.scalar(select(User).where(User.id == user.id).with_for_update())
     used = db.scalar(select(func.coalesce(func.sum(Evidence.size), 0)).join(
-        Session, Session.id == Evidence.session_id).where(Session.owner_id == user.id))
+        Session, Session.id == Evidence.session_id).where(Session.owner_id == user.id, Evidence.removed_at.is_(None)))
     key, sha, mime, size = storage.save(raw)
     if used + size > settings().max_storage_mb_per_user * 1024 * 1024:
         storage.delete(key)
@@ -470,7 +483,7 @@ async def upload(
 def download(session_id: str, evidence_id: str, user=Depends(current_user), db: DBSession = Depends(get_db)):
     authorized(db, session_id, user)
     evidence = db.get(Evidence, evidence_id)
-    if not evidence or evidence.session_id != session_id:
+    if not evidence or evidence.session_id != session_id or evidence.removed_at is not None:
         raise HTTPException(404, "Evidencia inexistente")
     return Response(
         LocalStorage().get(evidence.key),
@@ -490,7 +503,7 @@ def analysis(
     if session.state != "analyzing":
         session.language = language
     if session.diagnosis_mode == "meta":
-        count = len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id))))
+        count = len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id, Evidence.removed_at.is_(None)))))
         if count > image_limit(settings()):
             raise HTTPException(422, "Demasiadas imágenes para el proveedor seleccionado")
     job = enqueue(db, session)
@@ -569,13 +582,15 @@ def manual(
         return serialize(existing)
     validate_measurement(session, body.point_id, body.measured_at)
     session.language = language
+    point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
+    if point_unit(point) != ("boolean" if body.unit == "boolean" else "V"):
+        raise HTTPException(422, "La unidad no coincide con el tipo de medición del esquema")
     value = body.value / 1000 if body.unit == "mV" else body.value
     measurement = Measurement(
         session_id=session_id,
         client_id=body.client_id,
         point_id=body.point_id,
-        value=value,
-        unit="V",
+        **observation_fields(value, body.unit),
         source="manual",
         measured_at=body.measured_at,
         phase="verification" if session.state == "verifying" else "diagnosis",
@@ -868,8 +883,10 @@ def request_hardware(
     if active:
         raise HTTPException(409, "Ya existe un comando pendiente")
     command_id = uid()
+    point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
     payload = s.HardwareCommand(
-        command_id=command_id, session_id=session_id, device_id=device.id, point_id=body.point_id
+        command_id=command_id, session_id=session_id, device_id=device.id, point_id=body.point_id,
+        action="read_digital" if point_unit(point) == "boolean" else "read_voltage",
     ).model_dump()
     command = Command(
         id=command_id,
@@ -899,6 +916,7 @@ def accept_result(db, device, result):
         result.point_id != command.payload["point_id"]
         or result.calibration_id != device.calibration_id
         or (result.source == "simulated") != bool(device.simulated)
+        or result.unit != ("boolean" if command.payload["action"] == "read_digital" else "V")
         or (result.status == "ok" and result.sample_count != command.payload["sample_count"])
         or result.measured_at < command.created_at - 1
         or result.measured_at > time.time() + 30
@@ -913,8 +931,7 @@ def accept_result(db, device, result):
                 session_id=session.id,
                 client_id=command.id,
                 point_id=result.point_id,
-                value=result.value,
-                unit="V",
+                **observation_fields(result.value, result.unit),
                 source=result.source,
                 measured_at=result.measured_at,
                 calibration_id=result.calibration_id,

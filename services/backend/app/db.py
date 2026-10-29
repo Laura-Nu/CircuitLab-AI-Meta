@@ -6,6 +6,7 @@ from sqlalchemy import (
     String,
     Integer,
     Float,
+    Boolean,
     JSON,
     ForeignKey,
     UniqueConstraint,
@@ -160,6 +161,7 @@ class Evidence(RecordMixin, Base):
     sha256 = Column(String, nullable=False)
     size = Column(Integer, nullable=False)
     client_id = Column(String, nullable=False)
+    removed_at = Column(UTCInstant, nullable=True)
     __table_args__ = (UniqueConstraint("session_id", "client_id"),)
 
 
@@ -167,7 +169,8 @@ class Measurement(RecordMixin, Base):
     __tablename__ = "measurements"
     client_id = Column(String, nullable=False)
     point_id = Column(String, nullable=False)
-    value = Column(Float, nullable=False)
+    value = Column(Float, nullable=True)
+    boolean_value = Column(Boolean, nullable=True)
     unit = Column(String, nullable=False, default="V")
     source = Column(String, nullable=False)
     measured_at = Column(UTCInstant, nullable=False)

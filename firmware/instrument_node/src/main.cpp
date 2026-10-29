@@ -20,11 +20,13 @@ void execute(const char *line) {
   String point = command["point_id"] | "";
   int pin = point == "TP1" ? A0 : point == "TP2" ? A1 : point == "TP3" ? A2 : -1;
   int count = command["sample_count"] | 0;
+  String action = command["action"] | "";
   JsonDocument result;
   result["command_id"] = id;
   result["point_id"] = point;
   result["status"] = "precondition_failed";
   result["sample_count"] = 0;
+  result["unit"] = action == "read_digital" ? "boolean" : "V";
   if (String(command["protocol_version"] | "") == "1" &&
       String(command["action"] | "") == "read_voltage" && pin >= 0 && count >= 1 && count <= 100) {
     analogRead(pin); // discard first sample after channel switch
@@ -39,6 +41,20 @@ void execute(const char *line) {
     result["status"] = saturated ? "out_of_range" : "ok";
     result["sample_count"] = count;
     if (!saturated) result["value"] = total * ADC_REFERENCE_V / (count * 1023.0f);
+  }
+  if (String(command["protocol_version"] | "") == "1" &&
+      action == "read_digital" && pin >= 0 && count >= 1 && count <= 100) {
+    // Read-only input. No pull-up, writes, inferred voltage threshold or actuation.
+    pinMode(pin, INPUT);
+    bool state = digitalRead(pin) == HIGH;
+    bool stable = true;
+    for (int i = 0; i < count; ++i) {
+      stable &= (digitalRead(pin) == HIGH) == state;
+      delay(2);
+    }
+    result["status"] = stable ? "ok" : "out_of_range";
+    result["sample_count"] = count;
+    if (stable) result["value"] = state;
   }
   lastId = id;
   lastResponse = "";

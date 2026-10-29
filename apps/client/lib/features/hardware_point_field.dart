@@ -69,6 +69,13 @@ class HardwarePointField extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+        if (booleanPoint(specification, value)) ...[
+          const SizedBox(height: 8),
+          Text(
+            strings.t('booleanUsbHelp'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         if (pin != null) ...[
           const SizedBox(height: 8),
           Text(

@@ -2,6 +2,7 @@
 from sqlalchemy import select
 from app.db import Command, Event, Intervention, Job, Measurement
 from app.operations import functional_result
+from app.measurements import point_check
 
 TERMINAL_STATES = {"resolved", "no_fault_found", "inconclusive", "cancelled"}
 
@@ -13,18 +14,8 @@ def voltage_checks(db, session, *, phase="diagnosis", after=0):
         Measurement.measured_at >= after,
     ).order_by(Measurement.measured_at, Measurement.created_at)):
         latest[reading.point_id] = reading
-    return [
-        {
-            "point_id": point["id"], "label": point["label"],
-            "min_v": point["min_v"], "max_v": point["max_v"],
-            "measurement_id": latest[point["id"]].id if point["id"] in latest else None,
-            "value": latest[point["id"]].value if point["id"] in latest else None,
-            "source": latest[point["id"]].source if point["id"] in latest else None,
-            "measured_at": latest[point["id"]].measured_at if point["id"] in latest else None,
-            "passed": point["id"] in latest and point["min_v"] <= latest[point["id"]].value <= point["max_v"],
-        }
-        for point in session.specification.get("points", [])
-    ]
+    return [point_check(point, latest.get(point["id"])) for point in session.specification.get("points", [])]
+
 
 
 def baseline_ready(db, session):

@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 class Strict(BaseModel):
@@ -53,7 +53,7 @@ class PasswordReset(Strict):
 class SessionCreate(Strict):
     language: Literal["en", "es"] | None = None
     title: str = Field(min_length=3, max_length=120)
-    family: Literal["led_resistor", "voltage_divider", "analog_sensor"]
+    family: Literal["led_resistor", "voltage_divider", "analog_sensor", "digital_signal"]
     expected: str = Field(min_length=5, max_length=2000)
     purpose: Literal["diagnosis", "check_operation"] = "diagnosis"
     symptoms: str = Field(default="", max_length=2000)
@@ -68,16 +68,25 @@ class SessionCreate(Strict):
 
 
 class Point(Strict):
-    kind: Literal["supply", "sensor_signal", "dc_output", "custom"] = "custom"
+    kind: Literal["supply", "sensor_signal", "dc_output", "digital_state", "custom"] = "custom"
     id: str = Field(pattern=r"^TP[1-9][0-9]?$", max_length=4)
     label: str = Field(min_length=1, max_length=120)
-    min_v: float = Field(ge=0, le=5)
-    max_v: float = Field(ge=0, le=5)
+    value_kind: Literal["voltage", "boolean"] = "voltage"
+    min_v: float | None = Field(default=None, ge=0, le=5)
+    max_v: float | None = Field(default=None, ge=0, le=5)
+    expected_state: StrictBool | None = None
 
     @model_validator(mode="after")
     def bounds(self):
-        if self.min_v > self.max_v:
+        if self.value_kind == "boolean":
+            if self.expected_state is None or self.min_v is not None or self.max_v is not None:
+                raise ValueError("Boolean points require an expected state and no voltage limits")
+        elif self.min_v is None or self.max_v is None or self.expected_state is not None:
+            raise ValueError("Voltage points require both voltage limits and no boolean state")
+        elif self.min_v > self.max_v:
             raise ValueError("min_v debe ser menor o igual a max_v")
+        if self.kind == "digital_state" and self.value_kind != "boolean":
+            raise ValueError("Digital state points require boolean observations")
         return self
 
 
@@ -95,18 +104,32 @@ class Specification(Strict):
         return self
 
 
+class EvidenceRemoval(Strict):
+    version: int = Field(ge=1)
+    confirmed: Literal[True]
+
+
 class ManualMeasurement(Strict):
     client_id: str = Field(min_length=8, max_length=80)
     point_id: str = Field(max_length=4)
-    value: float = Field(ge=0, le=5000)
-    unit: Literal["V", "mV"] = "V"
+    value: float | StrictBool
+    unit: Literal["V", "mV", "boolean"] = "V"
     measured_at: float = Field(gt=0)
     conditions_confirmed: Literal[True]
 
+    @model_validator(mode="before")
+    @classmethod
+    def typed_value(cls, data):
+        if isinstance(data, dict):
+            value, unit = data.get("value"), data.get("unit", "V")
+            if (unit == "boolean") != (type(value) is bool):
+                raise ValueError("Boolean observations require true/false and unit=boolean")
+        return data
+
     @model_validator(mode="after")
     def voltage_range(self):
-        if self.unit == "V" and self.value > 5:
-            raise ValueError("Máximo 5 V")
+        if self.unit != "boolean" and not 0 <= self.value <= (5 if self.unit == "V" else 5000):
+            raise ValueError("Voltage is outside the supported range")
         return self
 
 
@@ -153,7 +176,7 @@ class HardwareCommand(Strict):
     command_id: str
     session_id: str
     device_id: str
-    action: Literal["read_voltage"] = "read_voltage"
+    action: Literal["read_voltage", "read_digital"] = "read_voltage"
     point_id: str
     sample_count: int = Field(default=20, ge=1, le=100)
     deadline_ms: int = Field(default=3000, ge=100, le=10000)
@@ -164,17 +187,27 @@ class HardwareResult(Strict):
     command_id: str
     status: Literal["ok", "timeout", "disconnected", "out_of_range", "precondition_failed"]
     point_id: str
-    value: float | None = Field(default=None, ge=0, le=5)
-    unit: Literal["V"] = "V"
+    value: float | StrictBool | None = None
+    unit: Literal["V", "boolean"] = "V"
     sample_count: int = Field(ge=0, le=100)
     source: Literal["instrumented", "simulated"]
     calibration_id: str
     measured_at: float
 
+    @model_validator(mode="before")
+    @classmethod
+    def typed_value(cls, data):
+        if isinstance(data, dict) and data.get("value") is not None:
+            if (data.get("unit", "V") == "boolean") != (type(data["value"]) is bool):
+                raise ValueError("Boolean results require a JSON boolean and unit=boolean")
+        return data
+
     @model_validator(mode="after")
     def valid_reading(self):
         if self.status == "ok" and (self.value is None or self.sample_count == 0):
             raise ValueError("Una lectura correcta requiere valor y muestras")
+        if self.unit == "V" and self.value is not None and not 0 <= self.value <= 5:
+            raise ValueError("Voltage is outside the supported range")
         if self.status != "ok" and self.value is not None:
             raise ValueError("Un error no es una lectura")
         return self
@@ -234,6 +267,7 @@ class DiagnosisOutput(Strict):
         "request_additional_view",
         "request_connection_confirmation",
         "read_voltage",
+        "read_digital",
         "request_manual_measurement",
         "propose_intervention",
         "inconclusive",

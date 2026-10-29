@@ -75,7 +75,9 @@ def test_restore_rehearsal_has_no_network_ports_or_production_target(tmp_path, m
                     {
                         "key": "11111111-1111-1111-1111-111111111111",
                         "sha256": hashlib.sha256(b"image").hexdigest(),
-                    }
+                    },
+                    {"key": "22222222-2222-2222-2222-222222222222", "sha256": "retained-history",
+                     "removed_at": "2026-10-29T12:00:00Z"},
                 ]
             ).encode()
         return b""
@@ -84,6 +86,7 @@ def test_restore_rehearsal_has_no_network_ports_or_production_target(tmp_path, m
     monkeypatch.setattr(backup_vps.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0))
     result = backup_vps.rehearse_restore(directory)
     assert result["database_restored"] and result["referenced_images_verified"] == 1
+    assert result["evidence_records_restored"] == 2
     assert calls[-1] == ["docker", "rm", "-f", "-v", cid]
     assert all("compose" not in args for args in calls)
 

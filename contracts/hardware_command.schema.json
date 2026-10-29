@@ -20,8 +20,11 @@
       "type": "string"
     },
     "action": {
-      "const": "read_voltage",
       "default": "read_voltage",
+      "enum": [
+        "read_voltage",
+        "read_digital"
+      ],
       "title": "Action",
       "type": "string"
     },

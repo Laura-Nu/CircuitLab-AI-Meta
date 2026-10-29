@@ -28,9 +28,10 @@
     "value": {
       "anyOf": [
         {
-          "maximum": 5,
-          "minimum": 0,
           "type": "number"
+        },
+        {
+          "type": "boolean"
         },
         {
           "type": "null"
@@ -40,8 +41,11 @@
       "title": "Value"
     },
     "unit": {
-      "const": "V",
       "default": "V",
+      "enum": [
+        "V",
+        "boolean"
+      ],
       "title": "Unit",
       "type": "string"
     },

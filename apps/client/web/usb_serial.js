@@ -79,7 +79,7 @@
       let command, allowed;
       try { command = JSON.parse(raw); allowed = JSON.parse(allowedRaw); }
       catch (_) { return JSON.stringify({status: "precondition_failed", sample_count: 0}); }
-      if (!command || !Array.isArray(allowed) || command.protocol_version !== "1" || command.action !== "read_voltage" ||
+      if (!command || !Array.isArray(allowed) || command.protocol_version !== "1" || !["read_voltage", "read_digital"].includes(command.action) ||
           typeof command.command_id !== "string" || command.command_id.length > 64 ||
           !["TP1", "TP2", "TP3"].includes(command.point_id) || !allowed.includes(command.point_id) ||
           !Number.isInteger(command.sample_count) || command.sample_count < 1 || command.sample_count > 100 ||
@@ -128,8 +128,11 @@
       settle({status: ["timeout","disconnected","out_of_range","precondition_failed"].includes(result.status)
         ? result.status : "out_of_range", sample_count: 0}); return;
     }
-    if (typeof result.value !== "number" || !Number.isFinite(result.value) || result.value < 0 ||
-        result.value > 5 || result.sample_count !== command.sample_count) {
+    const digital = command.action === "read_digital";
+    const validValue = digital ? typeof result.value === "boolean"
+      : typeof result.value === "number" && Number.isFinite(result.value) && result.value >= 0 && result.value <= 5;
+    if (!validValue || (result.unit ?? "V") !== (digital ? "boolean" : "V") ||
+        result.sample_count !== command.sample_count) {
       settle({status: "out_of_range", sample_count: 0}); return;
     }
     settle({status: "ok", value: result.value, sample_count: result.sample_count});

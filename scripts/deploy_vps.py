@@ -117,7 +117,7 @@ def verify_runtime_images(env, compose, process_env):
             raise DeploymentError("CircuitLab " + service + " is using an outdated image; deployment not verified")
 
 
-def apply(env, compose):
+def _apply(env, compose):
     if os.name != "posix" or str(ROOT) != env["SITE_ROOT"]:
         raise DeploymentError("Apply must run on Linux from the configured dedicated project directory")
     if not (ROOT / "build/site/app/index.html").is_file():
@@ -157,6 +157,14 @@ def apply(env, compose):
                    "--expect-build-revision", revision], text=True, env=process_env)
     print("CircuitLab API and worker revision verified: " + revision)
     print("CircuitLab containers deployed. Nginx and other projects were not modified. Database backup: " + str(backup))
+
+
+def apply(env, compose):
+    if os.name != "posix" or str(ROOT) != env["SITE_ROOT"]:
+        raise DeploymentError("Apply must run on Linux from the configured dedicated project directory")
+    from deploy_gateway import locked_project
+    with locked_project():
+        _apply(env, compose)
 
 
 def main():

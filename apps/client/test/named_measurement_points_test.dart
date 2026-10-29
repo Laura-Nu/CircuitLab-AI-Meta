@@ -80,6 +80,28 @@ void main() {
           );
           await tester.tap(find.text('Open'));
           await tester.pumpAndSettle();
+          expect(
+            find.text(strings.t('specificationWiringTitle')),
+            findsOneWidget,
+          );
+          expect(
+            find.text(strings.t('specificationOperationTitle')),
+            findsOneWidget,
+          );
+          expect(
+            find.text(strings.t('specificationLocationsTitle')),
+            findsOneWidget,
+          );
+          final example = find.byKey(const ValueKey('specification-example'));
+          await tester.ensureVisible(example);
+          await tester.tap(find.text(strings.t('specificationExampleTitle')));
+          await tester.pumpAndSettle();
+          expect(
+            find.text(strings.t('specificationExampleLocations')),
+            findsOneWidget,
+          );
+          await tester.tap(find.text(strings.t('specificationExampleTitle')));
+          await tester.pumpAndSettle();
           final selector = find.byKey(const ValueKey('TP7-kind'));
           await tester.ensureVisible(selector);
           await tester.tap(selector);
@@ -107,6 +129,11 @@ void main() {
           await tester.pumpAndSettle();
           final point = (saved!['points'] as List).singleWhere(
             (p) => p['id'] == 'TP7',
+          );
+          expect(saved!['connections'], fixtureSpec()['connections']);
+          expect(
+            saved!['functional_description'],
+            fixtureSpec()['functional_description'],
           );
           expect(point['kind'], 'sensor_signal');
           expect(point['label'], 'Declared sensor terminal');

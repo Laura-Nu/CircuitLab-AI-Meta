@@ -520,6 +520,111 @@
         }
       }
     },
+    "/api/v1/sessions/{session_id}/evidence/{evidence_id}": {
+      "delete": {
+        "summary": "Remove Evidence",
+        "operationId": "remove_evidence_api_v1_sessions__session_id__evidence__evidence_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceRemoval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Download",
+        "operationId": "download_api_v1_sessions__session_id__evidence__evidence_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health/live": {
       "get": {
         "summary": "Live",
@@ -995,57 +1100,6 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/sessions/{session_id}/evidence/{evidence_id}": {
-      "get": {
-        "summary": "Download",
-        "operationId": "download_api_v1_sessions__session_id__evidence__evidence_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "evidence_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Evidence Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -2303,6 +2357,27 @@
         ],
         "title": "Enroll"
       },
+      "EvidenceRemoval": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "confirmed"
+        ],
+        "title": "EvidenceRemoval"
+      },
       "FunctionalCheck": {
         "properties": {
           "client_id": {
@@ -2410,9 +2485,10 @@
           "value": {
             "anyOf": [
               {
-                "type": "number",
-                "maximum": 5.0,
-                "minimum": 0.0
+                "type": "number"
+              },
+              {
+                "type": "boolean"
               },
               {
                 "type": "null"
@@ -2422,7 +2498,10 @@
           },
           "unit": {
             "type": "string",
-            "const": "V",
+            "enum": [
+              "V",
+              "boolean"
+            ],
             "title": "Unit",
             "default": "V"
           },
@@ -2531,16 +2610,22 @@
             "title": "Point Id"
           },
           "value": {
-            "type": "number",
-            "maximum": 5000.0,
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
             "title": "Value"
           },
           "unit": {
             "type": "string",
             "enum": [
               "V",
-              "mV"
+              "mV",
+              "boolean"
             ],
             "title": "Unit",
             "default": "V"
@@ -2598,6 +2683,7 @@
               "supply",
               "sensor_signal",
               "dc_output",
+              "digital_state",
               "custom"
             ],
             "title": "Kind",
@@ -2615,26 +2701,58 @@
             "minLength": 1,
             "title": "Label"
           },
+          "value_kind": {
+            "type": "string",
+            "enum": [
+              "voltage",
+              "boolean"
+            ],
+            "title": "Value Kind",
+            "default": "voltage"
+          },
           "min_v": {
-            "type": "number",
-            "maximum": 5.0,
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Min V"
           },
           "max_v": {
-            "type": "number",
-            "maximum": 5.0,
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max V"
+          },
+          "expected_state": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected State"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "id",
-          "label",
-          "min_v",
-          "max_v"
+          "label"
         ],
         "title": "Point"
       },
@@ -2686,7 +2804,8 @@
             "enum": [
               "led_resistor",
               "voltage_divider",
-              "analog_sensor"
+              "analog_sensor",
+              "digital_signal"
             ],
             "title": "Family"
           },

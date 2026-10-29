@@ -33,8 +33,16 @@ class SerialAdapter:
                         continue
                     if result.get("status") != "ok":
                         return failed(command, calibration, False, result.get("status", "out_of_range"))
-                    value = float(result["value"])
-                    if not math.isfinite(value) or not 0 <= value <= 5:
+                    digital = command["action"] == "read_digital"
+                    value = result["value"]
+                    if result.get("point_id") != command["point_id"] or result.get("sample_count") != command["sample_count"]:
+                        return failed(command, calibration, False, "precondition_failed")
+                    if result.get("unit", "V") != ("boolean" if digital else "V"):
+                        return failed(command, calibration, False, "precondition_failed")
+                    if digital:
+                        if type(value) is not bool:
+                            return failed(command, calibration, False, "out_of_range")
+                    elif type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 5:
                         return failed(command, calibration, False, "out_of_range")
                     return {**failed(command, calibration, False), "status": "ok", "value": value,
                             "sample_count": result["sample_count"]}

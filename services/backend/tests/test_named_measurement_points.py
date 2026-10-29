@@ -36,4 +36,4 @@ def test_confirmed_name_and_type_persist_without_renumbering_the_point(client, h
     result = client.patch(f"{P}/sessions/{sid}/specification", headers=headers, json=spec)
     assert result.status_code == 200
     stored = client.get(f"{P}/sessions/{sid}", headers=headers).json()["specification"]["points"][0]
-    assert stored == spec["points"][0]
+    assert stored == {**spec["points"][0], "value_kind": "voltage"}

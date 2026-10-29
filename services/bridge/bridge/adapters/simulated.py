@@ -15,6 +15,11 @@ class SimulatedAdapter:
         if not allowed(command, config):
             return failed(command, calibration, True, "precondition_failed")
         value = config.get("simulated_values", {}).get(command["point_id"])
+        if command["action"] == "read_digital":
+            if type(value) is not bool:
+                return failed(command, calibration, True, "precondition_failed")
+            return {**failed(command, calibration, True), "status": "ok",
+                    "sample_count": command["sample_count"], "value": value}
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             return failed(command, calibration, True, "precondition_failed")
         if not 0 <= value <= 5:
