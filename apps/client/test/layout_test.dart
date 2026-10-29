@@ -351,7 +351,7 @@ void main() {
       await tester.tap(find.textContaining('Closed investigation').first);
       await tester.pumpAndSettle();
       expect(
-        find.text(strings.t('inconclusiveFollowUpNotice')),
+        find.text(strings.t('finishedInconclusiveHelp')),
         findsOneWidget,
       );
       await tester.ensureVisible(find.text(strings.t('startFollowUpSession')));

@@ -28,7 +28,11 @@ class InvestigationPanels extends StatelessWidget {
     final latest = stories.isEmpty ? null : stories.first as Map;
     final data = latest?['data'] as Map?;
     final generating = ['pending', 'running'].contains(latest?['status']);
-    final terminal = ['resolved', 'inconclusive'].contains(session['state']);
+    final terminal = [
+      'resolved',
+      'no_fault_found',
+      'inconclusive',
+    ].contains(session['state']);
     final canGenerate =
         session['can_edit'] == true &&
         session['storyboard_available'] == true &&

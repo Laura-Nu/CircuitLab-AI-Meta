@@ -4,6 +4,9 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "La evaluación sin reparación requiere todas las lecturas dentro de rango": ("baseline_not_ready", "Baseline assessment requires every reading to be within its declared range"),
+    "La prueba funcional debe realizarse después de las lecturas": ("baseline_observation_stale", "Perform the functional check after the recorded readings"),
+    "Espera a que termine el trabajo activo antes de cerrar": ("close_not_available", "Wait for active work to finish before closing"),
     "La clave de Resend permite enviar, pero no consultar recibos": ("resend_read_permission_required", "This Resend key can send emails but cannot retrieve receipts; configure read permission"),
     "No hay un recibo de Resend disponible": ("email_receipt_unavailable", "No Resend receipt is available"),
     "No se pudo consultar el estado de Resend": ("email_status_unavailable", "Could not retrieve Resend delivery status"),
@@ -160,9 +163,11 @@ LABELS = {
     "awaiting_measurement": ("Medición pendiente", "Measurement pending"),
     "awaiting_intervention": ("Intervención humana", "Human intervention"),
     "verifying": ("Verificando", "Verifying"),
-    "resolved": ("Criterio cumplido", "Criteria met"),
-    "inconclusive": ("Inconcluso", "Inconclusive"),
-    "cancelled": ("Cancelado", "Cancelled"),
+    "awaiting_functional_check": ("Falta comprobación funcional", "Functional check needed"),
+    "no_fault_found": ("Finalizada: sin falla observada", "Finished: no fault observed"),
+    "resolved": ("Finalizada: criterios cumplidos", "Finished: criteria met"),
+    "inconclusive": ("Finalizada: sin conclusión", "Finished: inconclusive"),
+    "cancelled": ("Cerrada sin verificar", "Closed without verification"),
     "manual": ("Manual", "Manual"),
     "instrumented": ("Instrumentada", "Instrumented"),
     "simulated": ("Simulada", "Simulated"),

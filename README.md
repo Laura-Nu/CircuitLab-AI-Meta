@@ -286,6 +286,46 @@ and request receipts are shown in the administrator interface. The ordinary read
 report omits that technical execution section. Simulation provenance remains visible.
 An unavailable Circuit Story feature is not advertised in the member workspace.
 
+Live diagnosis responses use a bounded output budget and server-side schema validation.
+If a provider JSON-encodes the predictions array or translations object as a string,
+the backend decodes that container and applies the same validation; the original
+provider receipt and decoded field names remain in the audit. Missing fields, invalid
+references, unauthorized points and truncated responses are not accepted as diagnoses.
+Transient failures use the existing bounded worker retry policy.
+
+Iterative model evaluation must keep synthetic readings on an isolated development
+database with the explicit simulated adapter and real Meta inference. Completing a
+virtual repair workflow must retain `physical_verification: false`. A healthy circuit
+or an ambiguous photograph should not be forced through an unnecessary intervention
+merely to reach a resolved state.
+
+## Guided investigation and completion
+
+The bilingual workspace separates running analysis from steps that require the
+operator. A four-stage guide shows preparation, analysis, checks and the result;
+the main action follows the current state. Requested connection confirmations and
+successfully uploaded requested photos enqueue the next analysis. Verification
+shows the fresh readings still needed and requires a recorded functional result.
+
+An investigation has explicit final outcomes:
+
+- **Criteria met**: post-intervention readings and a functional observation meet
+  the declared criteria. Simulation provenance remains visible.
+- **No fault observed**: after the analysis finds no established fault and every
+  recorded point is in range, the operator performs the declared functional check.
+  This baseline assessment does not require an invented intervention and never
+  establishes a verified physical repair.
+- **Inconclusive**: the available evidence or functional outcome did not establish
+  success. Findings and history remain available.
+- **Closed without verification**: the operator records a reason for ending an
+  inactive investigation. Active jobs and commands must finish first.
+
+The new completion routes are `POST /sessions/{id}/baseline-check` and
+`POST /sessions/{id}/close`. They enforce ownership, freshness, declared ranges
+and state transitions. New state values use the existing text state column and
+do not require a database schema migration. Deploy the API and worker with the
+updated web client; health capabilities include `guided_completion`.
+
 ## Administrator metrics
 
 Administrators have a Metrics section beside user administration. The web and

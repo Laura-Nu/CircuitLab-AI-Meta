@@ -16,7 +16,7 @@ import 'investigation.dart';
 import 'metrics.dart';
 import 'functional_check.dart';
 import 'specification_dialog.dart';
-import 'analysis_status.dart';
+import 'session_guidance.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
 
@@ -47,9 +47,11 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     'awaiting_measurement': tr('measurementPending'),
     'awaiting_intervention': tr('humanIntervention'),
     'verifying': tr('verifying'),
-    'resolved': tr('criteriaMet'),
-    'inconclusive': tr('inconclusive'),
-    'cancelled': tr('cancelled'),
+    'awaiting_functional_check': tr('baselineCheckNeeded'),
+    'no_fault_found': tr('finishedNoFault'),
+    'resolved': tr('finishedVerified'),
+    'inconclusive': tr('finishedInconclusive'),
+    'cancelled': tr('finishedWithoutVerification'),
   };
 
   late final CircuitApi api;
@@ -59,7 +61,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
   final search = TextEditingController();
   List<dynamic> sessions = [], devices = [], events = [];
   Map<String, dynamic>? selected;
-  String mode = '', section = 'sessions';
+  String mode = '', section = 'sessions', sessionFilter = 'all';
   bool providerConfigured = false, simulationAllowed = false;
   bool passwordVisible = false, confirmationVisible = false;
   String? error;
@@ -657,6 +659,15 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               .toLowerCase()
               .contains(query),
         )
+        .where(
+          (s) => switch (sessionFilter) {
+            'action' =>
+              !sessionFinished(s['state']) && s['state'] != 'analyzing',
+            'analyzing' => s['state'] == 'analyzing',
+            'finished' => sessionFinished(s['state']),
+            _ => true,
+          },
+        )
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,14 +719,14 @@ class _WorkbenchState extends ConsumerState<Workbench> {
               ),
               stat(
                 tr('inProgress'),
-                '${sessions.where((s) => !['resolved', 'inconclusive', 'cancelled'].contains(s['state'])).length}',
+                '${sessions.where((s) => !sessionFinished(s['state'])).length}',
                 Icons.hub_outlined,
                 tr('openDiagnoses'),
                 c.maxWidth,
               ),
               stat(
-                tr('criteriaMetLabel'),
-                '${sessions.where((s) => s['state'] == 'resolved').length}',
+                tr('finishedInvestigations'),
+                '${sessions.where((s) => sessionFinished(s['state'])).length}',
                 Icons.task_alt,
                 tr('checkDataSourcesInTheReport'),
                 c.maxWidth,
@@ -784,6 +795,24 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           ),
         ),
         SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final filter in {
+              'all': 'filterAll',
+              'action': 'filterAction',
+              'analyzing': 'filterAnalyzing',
+              'finished': 'filterFinished',
+            }.entries)
+              ChoiceChip(
+                label: Text(tr(filter.value)),
+                selected: sessionFilter == filter.key,
+                onSelected: (_) => setState(() => sessionFilter = filter.key),
+              ),
+          ],
+        ),
+        SizedBox(height: 16),
         if (filtered.isEmpty)
           box(
             Column(
@@ -812,57 +841,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
             ),
           )
         else
-          for (final s in filtered)
-            Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => context.go('/?session=${s['id']}'),
-                child: box(
-                  Row(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(13),
-                        decoration: BoxDecoration(
-                          color: mint.withValues(alpha: .07),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(Icons.memory, color: mint, size: 24),
-                      ),
-                      SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s['title'],
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              '${families[s['family']]}  ·  ${s['supply_v']} V',
-                              style: TextStyle(color: muted, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Flexible(
-                        child: badge(
-                          states[s['state']] ?? s['state'],
-                          s['state'] == 'resolved' ? mint : muted,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.arrow_forward, size: 18, color: muted),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          for (final s in filtered) sessionCard(Map<String, dynamic>.from(s)),
         SizedBox(height: 24),
         Text(
           tr('circuitlabAiTraceableDiagnosis'),
@@ -871,6 +850,97 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       ],
     );
   }
+
+  Widget sessionCard(Map<String, dynamic> s) => Padding(
+    padding: EdgeInsets.only(bottom: 12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => context.go('/?session=${s['id']}'),
+      child: box(
+        LayoutBuilder(
+          builder: (_, constraints) {
+            final tone = sessionTone(s['state']);
+            final status = badge(tr(sessionTitleKey(s['state'])), tone);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: tone.withValues(alpha: .09),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        sessionIcon(s['state']),
+                        color: tone,
+                        size: 24,
+                      ),
+                    ),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s['title'],
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            '${families[s['family']]} · ${s['supply_v']} V',
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (constraints.maxWidth > 720) ...[
+                      SizedBox(width: 12),
+                      status,
+                    ],
+                  ],
+                ),
+                SizedBox(height: 12),
+                if (constraints.maxWidth <= 720) ...[
+                  status,
+                  SizedBox(height: 10),
+                ],
+                Text(
+                  tr(sessionSummaryKey(s['state'])),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      tr(
+                        sessionFinished(s['state'])
+                            ? 'viewOutcome'
+                            : 'continueInvestigation',
+                      ),
+                      style: TextStyle(
+                        color: tone,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward, color: tone, size: 17),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
 
   Widget stat(
     String label,
@@ -945,10 +1015,7 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(s['title'], style: Theme.of(context).textTheme.headlineLarge),
-            badge(
-              states[state] ?? state,
-              state == 'resolved' ? mint : Colors.amber,
-            ),
+            badge(states[state] ?? state, sessionTone(state)),
           ],
         ),
         SizedBox(height: 10),
@@ -961,35 +1028,33 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           style: TextStyle(color: muted, fontSize: 12),
         ),
         SizedBox(height: 20),
+        SessionGuidance(
+          session: s,
+          busy: busy,
+          analyzing: analyzing,
+          onSpec: editSpec,
+          onEvidence: capture,
+          onAnalyze: requestAnalysis,
+          onConfirm: confirmConnection,
+          onManual: measure,
+          onBridge: hardware,
+          onIntervention: confirmIntervention,
+          onFunctional: recordFunctionalCheck,
+          onVerify: () => post('verification'),
+          onBaseline: recordBaselineCheck,
+          onReport: () => showReport(readable: true),
+          onNew: createSession,
+        ),
+        SizedBox(height: 20),
         Wrap(
           spacing: 8,
           runSpacing: 10,
           children: [
-            if (editable &&
-                ['draft', 'ready'].contains(state) &&
-                s['analysis_steps'] == 0)
-              OutlinedButton.icon(
-                onPressed: busy ? null : editSpec,
-                icon: Icon(Icons.account_tree_outlined, size: 17),
-                label: Text(tr('confirmSchematic')),
-              ),
-            if (editable && ['ready', 'awaiting_evidence'].contains(state))
-              FilledButton.icon(
-                onPressed: busy ? null : requestAnalysis,
-                icon: Icon(Icons.auto_awesome, size: 17),
-                label: Text(tr('analyzeEvidence')),
-              ),
-            if (editable && state == 'inconclusive')
-              OutlinedButton.icon(
-                onPressed: busy ? null : createSession,
-                icon: Icon(Icons.add),
-                label: Text(tr('startFollowUpSession')),
-              ),
-            if (editable && state == 'awaiting_confirmation')
-              FilledButton.icon(
-                onPressed: busy ? null : confirmConnection,
-                icon: Icon(Icons.fact_check_outlined, size: 17),
-                label: Text(tr('confirmConnection')),
+            if (editable && (s['completion'] as Map?)?['can_close'] == true)
+              TextButton.icon(
+                onPressed: busy ? null : closeInvestigation,
+                icon: Icon(Icons.stop_circle_outlined, size: 17),
+                label: Text(tr('finishWithoutVerification')),
               ),
             if (editable)
               OutlinedButton.icon(
@@ -997,11 +1062,12 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                 icon: Icon(Icons.devices, size: 17),
                 label: Text(tr('shareReview')),
               ),
-            OutlinedButton.icon(
-              onPressed: () => showReport(readable: true),
-              icon: Icon(Icons.article_outlined, size: 17),
-              label: Text(tr('readableReport')),
-            ),
+            if (!sessionFinished(state))
+              OutlinedButton.icon(
+                onPressed: () => showReport(readable: true),
+                icon: Icon(Icons.article_outlined, size: 17),
+                label: Text(tr('readableReport')),
+              ),
             if (api.isAdmin)
               OutlinedButton.icon(
                 onPressed: showReport,
@@ -1011,179 +1077,107 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           ],
         ),
         SizedBox(height: 24),
-        if (state == 'inconclusive') ...[
-          Text(
-            tr('inconclusiveFollowUpNotice'),
-            style: TextStyle(color: muted),
-          ),
-          SizedBox(height: 18),
-        ],
-        if (analyzing) ...[
-          AnalysisStatusBanner(
-            status: analysisRequested
-                ? 'submitting'
-                : currentJob?['status'] ?? 'running',
-            attempts: (currentJob?['attempts'] as num?)?.toInt() ?? 1,
-          ),
-          const SizedBox(height: 18),
-        ],
         Text(
           tr('originalContent'),
           style: TextStyle(color: muted, fontSize: 11),
         ),
         SizedBox(height: 12),
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              heading(Icons.flag_outlined, tr('sessionObjective')),
-              SizedBox(height: 16),
-              Text(
-                tr('expectedResult'),
-                style: TextStyle(color: mint, fontSize: 10, letterSpacing: 1.2),
-              ),
-              SizedBox(height: 5),
-              Text(s['expected']),
-              SizedBox(height: 16),
-              Text(
-                tr('observedSymptom'),
-                style: TextStyle(
-                  color: muted,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              SizedBox(height: 5),
-              Text(s['symptoms']),
-            ],
-          ),
-        ),
-        SizedBox(height: 18),
-        if (plan != null) ...[
-          box(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                heading(
-                  Icons.assistant_outlined,
-                  state == 'verifying'
-                      ? tr('functionalVerification')
-                      : tr('nextStep'),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  localized(plan, 'instruction') ?? '',
-                  style: TextStyle(fontSize: 17, height: 1.6),
-                ),
-                if (plan['rationale'] != null) ...[
-                  SizedBox(height: 10),
+        ExpansionTile(
+          key: PageStorageKey('circuit-details-${s['id']}'),
+          title: Text(tr('detailsAndEvidence')),
+          leading: Icon(Icons.account_tree_outlined),
+          initiallyExpanded: ['draft', 'awaiting_evidence'].contains(state),
+          tilePadding: EdgeInsets.symmetric(horizontal: 4),
+          children: [
+            box(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  heading(Icons.flag_outlined, tr('sessionObjective')),
+                  SizedBox(height: 16),
                   Text(
-                    localized(plan, 'rationale'),
-                    style: TextStyle(color: muted),
+                    tr('expectedResult'),
+                    style: TextStyle(
+                      color: mint,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
                   ),
+                  SizedBox(height: 5),
+                  Text(s['expected']),
+                  SizedBox(height: 16),
+                  Text(
+                    tr('observedSymptom'),
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(s['symptoms']),
                 ],
-                SizedBox(height: 18),
-                if (editable &&
-                    ['awaiting_measurement', 'verifying'].contains(state))
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
+              ),
+            ),
+            SizedBox(height: 18),
+            box(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      FilledButton.icon(
-                        onPressed: busy ? null : measure,
-                        icon: Icon(Icons.speed, size: 17),
-                        label: Text(tr('recordMeasurement')),
+                      Expanded(
+                        child: heading(
+                          Icons.photo_library_outlined,
+                          tr('visualEvidence'),
+                        ),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: busy ? null : hardware,
-                        icon: Icon(Icons.usb, size: 17),
-                        label: Text(tr('readUsingBridge')),
-                      ),
+                      if (editable &&
+                          ![
+                            'resolved',
+                            'no_fault_found',
+                            'awaiting_functional_check',
+                            'cancelled',
+                            'inconclusive',
+                            'analyzing',
+                          ].contains(state))
+                        IconButton(
+                          onPressed: busy ? null : capture,
+                          tooltip: tr('attachImage'),
+                          icon: Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: mint,
+                          ),
+                        ),
                     ],
                   ),
-                if (editable && state == 'awaiting_intervention')
-                  FilledButton(
-                    onPressed: busy ? null : confirmIntervention,
-                    child: Text(tr('recordCompletedIntervention')),
-                  ),
-                if (editable && state == 'verifying')
-                  Padding(
-                    padding: EdgeInsets.only(top: 12),
-                    child: Wrap(
+                  SizedBox(height: 14),
+                  if ((s['evidence'] as List).isEmpty)
+                    Text(
+                      tr('attachAnOverviewAndCloseUpsHiddenConnections'),
+                      style: TextStyle(color: muted),
+                    )
+                  else
+                    Wrap(
                       spacing: 12,
-                      runSpacing: 10,
+                      runSpacing: 12,
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: busy ? null : recordFunctionalCheck,
-                          icon: Icon(Icons.fact_check_outlined),
-                          label: Text(tr('recordFunctionalTest')),
-                        ),
-                        FilledButton(
-                          onPressed: busy ? null : () => post('verification'),
-                          child: Text(tr('evaluateFunctionalCriteria')),
-                        ),
+                        for (final e in s['evidence'])
+                          EvidenceThumbnail(
+                            key: ValueKey('${s['id']}:${e['id']}'),
+                            api: api,
+                            sessionId: s['id'],
+                            evidence: e,
+                          ),
                       ],
-                    ),
-                  ),
-              ],
-            ),
-            accent: true,
-          ),
-          SizedBox(height: 18),
-        ],
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: heading(
-                      Icons.photo_library_outlined,
-                      tr('visualEvidence'),
-                    ),
-                  ),
-                  if (editable &&
-                      ![
-                        'resolved',
-                        'cancelled',
-                        'inconclusive',
-                        'analyzing',
-                      ].contains(state))
-                    IconButton(
-                      onPressed: busy ? null : capture,
-                      tooltip: tr('attachImage'),
-                      icon: Icon(
-                        Icons.add_photo_alternate_outlined,
-                        color: mint,
-                      ),
                     ),
                 ],
               ),
-              SizedBox(height: 14),
-              if ((s['evidence'] as List).isEmpty)
-                Text(
-                  tr('attachAnOverviewAndCloseUpsHiddenConnections'),
-                  style: TextStyle(color: muted),
-                )
-              else
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final e in s['evidence'])
-                      EvidenceThumbnail(
-                        key: ValueKey('${s['id']}:${e['id']}'),
-                        api: api,
-                        sessionId: s['id'],
-                        evidence: e,
-                      ),
-                  ],
-                ),
-            ],
-          ),
+            ),
+            SizedBox(height: 18),
+          ],
         ),
-        SizedBox(height: 18),
+        SizedBox(height: 16),
         box(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1204,7 +1198,15 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                   tr('theAnalysisWillAppearHereEveryConclusionMust'),
                   style: TextStyle(color: muted),
                 ),
-              for (final h in (s['hypotheses'] as List).reversed.take(6)) ...[
+              for (final h
+                  in (s['hypotheses'] as List)
+                      .where(
+                        (h) =>
+                            h['data']['analysis_step'] ==
+                            (s['analysis_steps'] ?? 0),
+                      )
+                      .toList()
+                      .reversed) ...[
                 Divider(),
                 Text(
                   localized(h['data'], 'cause'),
@@ -1223,12 +1225,13 @@ class _WorkbenchState extends ConsumerState<Workbench> {
                   localized(h['data'], 'explanation'),
                   style: TextStyle(color: muted),
                 ),
-                Text(
-                  tr('references', {
-                    'ids': (h['data']['evidence_ids'] as List).join(', '),
-                  }),
-                  style: TextStyle(color: muted, fontSize: 10),
-                ),
+                if (api.isAdmin)
+                  Text(
+                    tr('references', {
+                      'ids': (h['data']['evidence_ids'] as List).join(', '),
+                    }),
+                    style: TextStyle(color: muted, fontSize: 10),
+                  ),
               ],
             ],
           ),
@@ -1326,46 +1329,61 @@ class _WorkbenchState extends ConsumerState<Workbench> {
           ),
         ),
         SizedBox(height: 18),
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              heading(Icons.history, tr('timeline')),
-              SizedBox(height: 14),
-              for (final e in events.reversed.take(35))
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.circle, color: mint, size: 7),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          eventLabel(e),
-                          style: TextStyle(color: muted, fontSize: 12),
-                        ),
+        ExpansionTile(
+          key: PageStorageKey('session-history-${s['id']}'),
+          title: Text(tr('investigationHistory')),
+          leading: Icon(Icons.history),
+          tilePadding: EdgeInsets.symmetric(horizontal: 4),
+          children: [
+            box(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  heading(Icons.history, tr('timeline')),
+                  SizedBox(height: 14),
+                  for (final e in events.reversed.take(35))
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.circle, color: mint, size: 7),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              eventLabel(e),
+                              style: TextStyle(color: muted, fontSize: 12),
+                            ),
+                          ),
+                          Text(
+                            '#${e['sequence']}',
+                            style: TextStyle(
+                              color: muted,
+                              fontFamily: 'monospace',
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        '#${e['sequence']}',
-                        style: TextStyle(
-                          color: muted,
-                          fontFamily: 'monospace',
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: 18),
+          ],
         ),
         SizedBox(height: 18),
-        InvestigationPanels(
-          session: s,
-          busy: busy,
-          technicalDetails: api.isAdmin,
-          onGenerate: () => post('storyboards'),
+        ExpansionTile(
+          title: Text(tr('agentDecisionTrace')),
+          tilePadding: EdgeInsets.symmetric(horizontal: 4),
+          children: [
+            InvestigationPanels(
+              session: s,
+              busy: busy,
+              technicalDetails: api.isAdmin,
+              onGenerate: () => post('storyboards'),
+            ),
+          ],
         ),
       ],
     );
@@ -1373,6 +1391,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
 
   String eventLabel(dynamic e) =>
       {
+        'investigation_closed': tr('investigationClosed'),
+        'baseline_assessment_completed': tr('baselineAssessmentCompleted'),
+        'baseline_functional_check_recorded': tr('baselineFunctionalRecorded'),
         'session_created': tr('sessionCreated'),
         'specification_confirmed': tr('schematicAndCriteriaConfirmed'),
         'evidence_added': tr('imageAttached'),
@@ -1583,7 +1604,9 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         .toList();
     String point = s['state'] == 'awaiting_measurement'
         ? s['pending_test']['point_id']
-        : points.first;
+        : ((s['completion'] as Map?)?['missing_points'] as List?)
+                  ?.firstOrNull ??
+              points.first;
     final value = TextEditingController();
     bool confirmed = false;
     final accepted = await dialog(
@@ -1662,6 +1685,53 @@ class _WorkbenchState extends ConsumerState<Workbench> {
     }
   }
 
+  Future<void> recordBaselineCheck() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => FunctionalCheckDialog(
+        baseline: true,
+        criteria: selected!['specification']['functional_description'] ?? '',
+      ),
+    );
+    if (result != null) {
+      await post('baseline-check', {
+        ...result,
+        'client_id': clientId(),
+        'performed_at': DateTime.now().millisecondsSinceEpoch / 1000,
+        'confirmed': true,
+      });
+    }
+  }
+
+  Future<void> closeInvestigation() async {
+    final reason = TextEditingController();
+    final accepted = await dialog(
+      tr('finishWithoutVerification'),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr('closeInvestigationHelp')),
+          SizedBox(height: 16),
+          field(reason, tr('closureReason'), lines: 3),
+        ],
+      ),
+      tr('confirmCloseInvestigation'),
+    );
+    if (accepted == true) {
+      if (reason.text.trim().length < 5) {
+        toast(tr('closeReasonRequired'));
+      } else {
+        await post('close', {
+          'version': selected!['version'],
+          'reason': reason.text.trim(),
+          'confirmed': true,
+        });
+      }
+    }
+    reason.dispose();
+  }
+
   Future<void> confirmIntervention() async {
     final text = TextEditingController();
     final accepted = await dialog(
@@ -1696,7 +1766,17 @@ class _WorkbenchState extends ConsumerState<Workbench> {
       tr('confirmReview'),
     );
     if (accepted == true) {
-      await post('confirmation', {'description': text.text, 'confirmed': true});
+      await action(() async {
+        await api.request(
+          '/sessions/${selected!['id']}/confirmation',
+          method: 'POST',
+          data: {'description': text.text, 'confirmed': true},
+        );
+        await api.request(
+          '/sessions/${selected!['id']}/analysis',
+          method: 'POST',
+        );
+      });
     }
     text.dispose();
   }
@@ -1720,11 +1800,18 @@ class _WorkbenchState extends ConsumerState<Workbench> {
         imageQuality: 90,
       );
       if (image == null) return;
+      final resumeAfterUpload = selected!['state'] == 'awaiting_evidence';
       final synced = await api.upload(
         selected!['id'],
         await image.readAsBytes(),
         image.name,
       );
+      if (synced && resumeAfterUpload) {
+        await api.request(
+          '/sessions/${selected!['id']}/analysis',
+          method: 'POST',
+        );
+      }
       toast(synced ? tr('evidenceAttached') : tr('imageSavedToTheLocalQueue'));
     });
   }

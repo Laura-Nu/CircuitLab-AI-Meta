@@ -48,6 +48,7 @@ from app.db import (
     uid,
 )
 from app.domain import authorized, commit, enqueue, record, serialize, transition
+from app.completion import baseline_ready, completion_status, voltage_checks
 from app.security import (COOKIE, COOKIE_PATH, authentication_response, browser_origin, current_user,
                           digest, issue_tokens, session_payload, set_refresh_cookie, verify_password)
 from app.storage import LocalStorage
@@ -277,6 +278,7 @@ def details(db, session):
     ]:
         rows = db.scalars(select(model).where(model.session_id == session.id).order_by(model.created_at))
         result[key] = [serialize(row) for row in rows]
+    result["completion"] = completion_status(db, session)
     return result
 
 
@@ -295,7 +297,7 @@ def get_session(session_id: str, user=Depends(current_user), db: DBSession = Dep
 @app.post(prefix + "/sessions/{session_id}/storyboards", status_code=202)
 def create_story(session_id: str, user=Depends(current_user), db: DBSession = Depends(get_db)):
     session = authorized(db, session_id, user, write=True)
-    if session.state not in {"resolved", "inconclusive"} or not session.analysis_steps:
+    if session.state not in {"resolved", "no_fault_found", "inconclusive"} or not session.analysis_steps:
         raise HTTPException(409, "Completa el diagnóstico antes de crear la historia")
     if not stories.configured():
         raise HTTPException(503, "La creación de historias no está disponible")
@@ -368,7 +370,7 @@ async def upload(
     )
     if existing:
         return serialize(existing)
-    if session.state in {"resolved", "cancelled", "inconclusive", "analyzing"}:
+    if session.state in {"resolved", "no_fault_found", "cancelled", "inconclusive", "analyzing", "awaiting_functional_check"}:
         raise HTTPException(409, "La sesión no admite evidencia en este estado")
     limit = image_limit(settings()) if session.diagnosis_mode == "meta" else 12
     if len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id)))) >= limit:
@@ -605,6 +607,62 @@ def verify(session_id: str, user=Depends(current_user), db: DBSession = Depends(
     job = enqueue(db, session, "verification")
     commit(db)
     return {"job_id": job.id, "status": job.status}
+
+
+@app.post(prefix + "/sessions/{session_id}/baseline-check", status_code=201)
+def baseline_check(
+    session_id: str, body: s.FunctionalCheck,
+    user=Depends(current_user), db: DBSession = Depends(get_db),
+):
+    session = authorized(db, session_id, user, write=True)
+    previous = db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.kind == "baseline_functional_check_recorded",
+        Event.data["client_id"].as_string() == body.client_id,
+    ))
+    if previous:
+        return {"event_id": previous.id, **previous.data, "state": session.state}
+    if session.state not in {"inconclusive", "awaiting_functional_check"} or not baseline_ready(db, session):
+        raise HTTPException(409, "La evaluación sin reparación requiere todas las lecturas dentro de rango")
+    checks = voltage_checks(db, session)
+    if not max(c["measured_at"] for c in checks) <= body.performed_at <= time.time() + 30:
+        raise HTTPException(422, "La prueba funcional debe realizarse después de las lecturas")
+    if session.state == "inconclusive":
+        transition(db, session, "awaiting_functional_check", "baseline_review_requested")
+    data = {**body.model_dump(exclude={"confirmed"}), "confirmed_by": user.id,
+            "criteria": session.specification["functional_description"], "source": "human_observation"}
+    record(db, session, "baseline_functional_check_recorded", data)
+    sources = {c["source"] for c in checks}
+    verification = {
+        "assessment_kind": "baseline", "spec_version": session.spec_version,
+        "criteria": session.specification, "checks": checks, "electrical_passed": True,
+        "functional_check": data, "passed": body.passed,
+        "verification_basis": "mixed" if len(sources) > 1 else next(iter(sources)),
+        "physical_verification": False,
+        "physical_functional_check": body.passed and session.diagnosis_mode == "meta"
+        and sources.issubset({"manual", "instrumented"}),
+    }
+    db.add(Verification(session_id=session.id, data=verification))
+    record(db, session, "baseline_assessment_completed", verification)
+    transition(db, session, "no_fault_found" if body.passed else "inconclusive", "baseline_functional_check")
+    commit(db)
+    return {**data, "state": session.state}
+
+
+@app.post(prefix + "/sessions/{session_id}/close")
+def close_investigation(
+    session_id: str, body: s.CloseSession,
+    user=Depends(current_user), db: DBSession = Depends(get_db),
+):
+    session = authorized(db, session_id, user, write=True)
+    if session.version != body.version:
+        raise HTTPException(409, "Versión desactualizada; recarga la sesión")
+    if not completion_status(db, session)["can_close"]:
+        raise HTTPException(409, "Espera a que termine el trabajo activo antes de cerrar")
+    record(db, session, "investigation_closed", {"reason": body.reason, "closed_by": user.id,
+                                               "physical_verification": False})
+    transition(db, session, "cancelled", "closed_without_verification")
+    commit(db)
+    return serialize(session)
 
 
 @app.get(prefix + "/sessions/{session_id}/report")

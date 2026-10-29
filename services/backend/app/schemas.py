@@ -119,6 +119,12 @@ class FunctionalCheck(Strict):
     confirmed: Literal[True]
 
 
+class CloseSession(Strict):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=5, max_length=1000)
+    confirmed: Literal[True]
+
+
 class Enroll(Strict):
     name: str = Field(min_length=2, max_length=120)
     points: list[str] = Field(min_length=1, max_length=8)

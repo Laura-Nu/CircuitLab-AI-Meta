@@ -3,7 +3,12 @@ import '../l10n/app_strings.dart';
 
 class FunctionalCheckDialog extends StatefulWidget {
   final String criteria;
-  const FunctionalCheckDialog({super.key, required this.criteria});
+  final bool baseline;
+  const FunctionalCheckDialog({
+    super.key,
+    required this.criteria,
+    this.baseline = false,
+  });
   @override
   State<FunctionalCheckDialog> createState() => _FunctionalCheckDialogState();
 }
@@ -33,7 +38,13 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(tr('functionalTestNotice')),
+              Text(
+                tr(
+                  widget.baseline
+                      ? 'baselineFunctionalNotice'
+                      : 'functionalTestNotice',
+                ),
+              ),
               const SizedBox(height: 16),
               SelectableText(widget.criteria),
               const SizedBox(height: 16),
@@ -67,7 +78,13 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 value: confirmed,
-                title: Text(tr('functionalTestConfirmed')),
+                title: Text(
+                  tr(
+                    widget.baseline
+                        ? 'baselineFunctionalConfirmed'
+                        : 'functionalTestConfirmed',
+                  ),
+                ),
                 onChanged: (value) => setState(() => confirmed = value == true),
               ),
             ],

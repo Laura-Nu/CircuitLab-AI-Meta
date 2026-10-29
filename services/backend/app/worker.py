@@ -18,6 +18,7 @@ from app.db import (
     uid,
 )
 from app.domain import record, serialize, transition
+from app.completion import baseline_ready
 from app.meta import analyze
 from app import stories
 from app.operations import BudgetExceeded, functional_result, heartbeat, reserve_budget, validate_runtime
@@ -238,6 +239,8 @@ def process(job_id, lease_token):
                     "propose_intervention": "awaiting_intervention",
                     "inconclusive": "inconclusive",
                 }[output.action]
+                if state == "inconclusive" and baseline_ready(db, session):
+                    state = "awaiting_functional_check"
                 transition(db, session, state, output.rationale)
             job.status = "completed"
             job.error = None

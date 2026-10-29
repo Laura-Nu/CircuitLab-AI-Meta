@@ -674,6 +674,8 @@ class _MetricsPanelState extends State<MetricsPanel> {
       'awaiting_evidence': 'evidenceNeeded',
       'awaiting_confirmation': 'confirmAConnection',
       'awaiting_measurement': 'measurementPending',
+      'awaiting_functional_check': 'baselineCheckNeeded',
+      'no_fault_found': 'finishedNoFault',
       'awaiting_intervention': 'humanIntervention',
       'verifying': 'verifying',
       'resolved': 'criteriaMet',

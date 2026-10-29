@@ -16,13 +16,16 @@ TRANSITIONS = {
         "awaiting_measurement",
         "awaiting_intervention",
         "inconclusive",
+        "awaiting_functional_check",
         "ready",
     },
     "awaiting_measurement": {"analyzing", "cancelled"},
     "awaiting_intervention": {"verifying", "cancelled"},
     "verifying": {"resolved", "inconclusive", "cancelled"},
     "resolved": set(),
-    "inconclusive": set(),
+    "inconclusive": {"awaiting_functional_check"},
+    "awaiting_functional_check": {"no_fault_found", "inconclusive", "cancelled"},
+    "no_fault_found": set(),
     "cancelled": set(),
 }
 

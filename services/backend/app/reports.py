@@ -14,6 +14,9 @@ LIMITATIONS = {
     ],
 }
 EVENTS = {
+    "baseline_functional_check_recorded": ("Comprobación funcional sin reparación", "Functional check without repair"),
+    "baseline_assessment_completed": ("Evaluación sin reparación finalizada", "Baseline assessment completed"),
+    "investigation_closed": ("Investigación cerrada sin verificar", "Investigation closed without verification"),
     "functional_check_recorded": ("Prueba funcional registrada", "Functional test recorded"),
     "production_provider_probe": ("Prueba real del proveedor", "Real provider probe"),
     "story_requested": ("Historia solicitada", "Story requested"),
@@ -148,9 +151,15 @@ def render_markdown(report, language, *, technical_details=False):
     lines += ["", f"## {text('Intervenciones', 'Interventions')}"]
     for item in report["interventions"]:
         lines.append(f"- {timestamp(item['created_at'])}: {safe_text(item['description'])}")
+    for event in report["events"]:
+        if event["kind"] == "investigation_closed":
+            lines += ["", text("## Cierre sin verificación", "## Closed without verification"),
+                      safe_text(event["data"]["reason"])]
     lines += ["", f"## {text('Verificación', 'Verification')}"]
     for item in report["verifications"]:
         data = item["data"]
+        if data.get("assessment_kind") == "baseline":
+            lines.append(text("Evaluación sin intervención: no se observó una falla en las condiciones comprobadas; no acredita una reparación.", "Assessment without intervention: no fault observed under the checked conditions; no repair is established."))
         lines.append(f"- {text('Criterios cumplidos', 'Criteria met')}: {yes if data['passed'] else no}")
         lines.append(
             f"- {text('Verificación física acreditada', 'Physical verification established')}: {yes if data['physical_verification'] and data.get('functional_check') else no}"
