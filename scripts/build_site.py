@@ -72,23 +72,12 @@ def build(output, landing_only=False, apk=None):
     if download.is_file():
         checksum = hashlib.sha256(download.read_bytes()).hexdigest()
         (download.parent / "circuitlab-ai.apk.sha256").write_text(checksum + "  circuitlab-ai.apk\n", encoding="utf-8")
-    # Only the explicit public binary is copied; never bundle bridge config or state.
-    bridge = ROOT / "releases/bridge/circuitlab-bridge-windows.exe"
-    bridge_manifest = ROOT / "releases/bridge/manifest.json"
-    if bridge.is_file():
-        metadata = json.loads(bridge_manifest.read_text(encoding="utf-8"))
-        binary = bridge.read_bytes()
-        if (binary[:2] != b"MZ" or metadata.get("filename") != bridge.name
-                or metadata.get("platform") != "windows-x64"
-                or metadata.get("size") != len(binary)
-                or metadata.get("sha256") != hashlib.sha256(binary).hexdigest()):
-            raise ValueError("Bridge release metadata or checksum is invalid")
-        destination = output / "downloads" / bridge.name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(bridge, destination)
-        destination.with_suffix(".exe.sha256").write_text(
-            metadata["sha256"] + "  " + bridge.name + "\n", encoding="utf-8")
-        shutil.copy2(bridge_manifest, destination.parent / "circuitlab-bridge-windows.json")
+    # Browser USB replaces the unsigned executable. Remove only its explicit old public artifacts.
+    for filename in ("circuitlab-bridge-windows.exe", "circuitlab-bridge-windows.exe.sha256",
+                     "circuitlab-bridge-windows.json"):
+        obsolete = output / "downloads" / filename
+        if obsolete.is_file() and not obsolete.is_symlink():
+            obsolete.unlink()
     for language, destination in (("es", output / "index.html"), ("en", output / "en/index.html")):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(render_landing(language, catalogs, download.is_file()), encoding="utf-8")

@@ -3,7 +3,7 @@ import os
 import re
 
 API_CONTRACT_VERSION = "2"
-CAPABILITIES = ["functional_checks", "role_aware_reports", "guided_completion", "lightweight_polling", "operation_assessment"]
+CAPABILITIES = ["functional_checks", "role_aware_reports", "browser_usb", "guided_completion", "lightweight_polling", "operation_assessment"]
 
 
 def deployment_metadata():

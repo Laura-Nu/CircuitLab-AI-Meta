@@ -242,50 +242,43 @@ $env:BRIDGE_CONFIG = 'credentials.json'
 uv run python -m bridge.main
 ```
 
-### Windows desktop companion
+### Direct browser USB
 
-Under **Devices**, users can download **CircuitLab Bridge for Windows 10/11 x64**.
-Download it once, then open it whenever USB readings are needed. Python and a source
-checkout are not required. Register a bridge, copy the complete one-time credential
-block, use **Paste CircuitLab credential** in the desktop application, choose the
-detected USB port, and click **Connect**. The copied block includes the API's actual
-WebSocket address. Keep the desktop application open while requesting readings.
+Under **Devices**, register a **USB instrument** with its calibration identifier,
+then click **Connect USB** and select its serial port in the browser permission
+dialog. No executable, Python installation, or manually copied bridge token is
+required for this path. Web Serial requires a secure context and browser support;
+the UI checks availability. See the [Web Serial documentation](https://developer.chrome.com/docs/capabilities/serial).
 
-Settings are protected using Windows DPAPI for the current Windows user under
-`%LOCALAPPDATA%/CircuitLab/Bridge`; they are not embedded in the public executable.
-The executable starts disconnected on subsequent launches. Its per-device SQLite
-journal preserves command deduplication. A second copy is prevented in the same
-Windows session. Rejected credentials stop reconnection and require correction.
+The existing reference instrument protocol remains unchanged: 115200 baud,
+TP1/A0, TP2/A1, TP3/A2, confirmed common GND and calibrated 0-5 V DC acquisition.
+An arbitrary Arduino sketch does not implement this protocol. The application
+does not upload firmware or modify the board being diagnosed.
 
-The connected badge confirms desktop-to-server communication. It does not prove
-USB acquisition or instrument calibration. A compatible instrument and firmware
-are still required; this application does not upload firmware or replace the
-program of a board being diagnosed. From an existing or new session, use **Read
-with bridge** when the workflow requests a measurement and choose that instrument.
-The selection is per measurement; the command/result is recorded in that session.
-Phones can use the web/Android session while the bridge runs on the USB-connected
-Windows computer. macOS/Linux binaries are not included in this release; the Python
-bridge remains available for development.
+Open a session after connecting, or return to one already created. Use **Read with
+USB**, choose the registered instrument and confirm the electrical conditions.
+Commands, results and session transitions use the existing backend validation and
+database audit trail. A successful connection is not a completed hardware check.
+Readings that time out, disconnect, or violate the protocol never become numeric
+measurements or physical verification.
 
-To reproduce the Windows executable on Windows x64:
+Keep the connected tab visible. Hiding the tab, closing it, losing the USB port,
+signing out, or expiring the login stops acquisition. One short server connection
+lease permits a single tab at a time; another connection is rejected while it is
+active. Client credentials remain in memory; the server stores a lease digest and expiry. Automatic USB polling does
+not renew the user's four-hour inactivity window. The controller survives normal
+session navigation, and server delivery IDs prevent another connection from
+submitting or replaying a prior connection's command.
 
-```powershell
-uv sync --project services/bridge --frozen --group bundle
-uv run --project services/bridge --group bundle python scripts/build_bridge_windows.py
-```
+The Android app does not directly open USB ports in this release. It can use
+manual readings or request a reading from an instrument connected in the account's
+desktop browser. Unsupported browsers display manual-reading guidance. Existing
+Python/WebSocket bridges remain compatible for prepared laboratory installations.
 
-The build uses [PyInstaller](https://www.pyinstaller.org/en/stable/usage.html) in
-one-file windowed mode with the existing CircuitLab icon. It explicitly includes
-the desktop entry point and icon, runs a dependency/UI smoke check, and publishes
-only the executable, SHA-256 checksum and public release manifest under
-`releases/bridge`. The executable is currently unsigned; it has no Authenticode
-publisher certificate. It never contains enrolled device credentials or Meta keys.
-
-`python scripts/build_site.py` verifies the release manifest and publishes the
-binary at `/downloads/circuitlab-bridge-windows.exe`. An existing VPS receives it
-through the normal `git pull` and site packaging steps; it does not build Windows
-executables on Linux. Web and Android version 0.1.10/build 11 include the download
-instructions and registration guidance.
+Deploy database migration **0008** with the API before using the new client.
+Web and Android release **0.1.11/build 12** include this workflow. The Windows
+executable is retired from the repository and public site packaging. Rebuilding
+the site removes only its three named legacy public download artifacts.
 
 The bridge initiates the outbound connection and requires WSS outside localhost.
 Its example configuration uses simulation. Real readings require calibrated hardware

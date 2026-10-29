@@ -13,6 +13,7 @@ import '../main.dart';
 import '../l10n/app_strings.dart';
 import '../core/form_fields.dart';
 import '../core/measurement_points.dart';
+import '../core/browser_usb.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
@@ -60,6 +61,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
   };
 
   late final CircuitApi api;
+  late final BrowserUsbController usb;
   final mail = TextEditingController();
   final password = TextEditingController();
   final confirmPassword = TextEditingController();
@@ -86,12 +88,18 @@ class _WorkbenchState extends ConsumerState<Workbench>
     WidgetsBinding.instance.addObserver(this);
     api = ref.read(apiProvider);
     api.addListener(authChanged);
+    usb = ref.read(browserUsbProvider);
+    usb.addListener(usbChanged);
     init();
     timer = Timer.periodic(Duration(seconds: 4), (_) {
       if (foreground && api.signedIn && !busy && !refreshing) {
         refresh(silent: true);
       }
     });
+  }
+
+  void usbChanged() {
+    if (mounted) setState(() {});
   }
 
   void authChanged() {
@@ -131,6 +139,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
     WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
     api.removeListener(authChanged);
+    usb.removeListener(usbChanged);
     confirmPassword.dispose();
     mail.dispose();
     password.dispose();
@@ -411,6 +420,31 @@ class _WorkbenchState extends ConsumerState<Workbench>
                   ),
                 ),
                 if (busy) LinearProgressIndicator(minHeight: 2),
+                if (usb.active || usb.connecting)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        if (usb.connecting || usb.state == 'reading')
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          const Icon(Icons.usb, size: 18, color: mint),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(usbStatus())),
+                        TextButton(
+                          onPressed: () => usb.disconnect(),
+                          child: Text(tr('usbDisconnect')),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (error != null)
                   Container(
                     width: double.infinity,
@@ -1601,17 +1635,19 @@ class _WorkbenchState extends ConsumerState<Workbench>
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       SizedBox(height: 12),
-      Text(
-        tr('theBridgeOpensAnOutboundConnectionItOnly'),
-        style: TextStyle(color: muted),
-      ),
+      Text(tr('usbDevicesIntro'), style: TextStyle(color: muted)),
       SizedBox(height: 24),
-      BridgeSetupCard(onDownload: downloadBridge),
+      BridgeSetupCard(supported: usb.supported),
+      if (!usb.active && usb.state != 'idle')
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text(usbStatus()),
+        ),
       SizedBox(height: 24),
       FilledButton.icon(
         onPressed: busy ? null : enroll,
         icon: Icon(Icons.add),
-        label: Text(tr('registerBridge')),
+        label: Text(tr('usbRegister')),
       ),
       SizedBox(height: 24),
       if (devices.isEmpty)
@@ -1629,6 +1665,31 @@ class _WorkbenchState extends ConsumerState<Workbench>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 heading(Icons.usb, d['name']),
+                if (d['transport'] == 'browser_usb') ...[
+                  const SizedBox(height: 12),
+                  Text(tr('usbBrowserInstrument')),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed:
+                        !usb.supported ||
+                            usb.connecting ||
+                            (usb.active && usb.deviceId != d['id'])
+                        ? null
+                        : () => usb.deviceId == d['id']
+                              ? usb.disconnect()
+                              : usb.connect(d),
+                    icon: const Icon(Icons.usb),
+                    label: Text(
+                      tr(
+                        usb.deviceId == d['id']
+                            ? 'usbDisconnect'
+                            : 'usbConnect',
+                      ),
+                    ),
+                  ),
+                  if (usb.lastResult.isNotEmpty && usb.deviceId == d['id'])
+                    Text(tr('usbResult_${usb.lastResult}')),
+                ],
                 SizedBox(height: 12),
                 badge(
                   d['last_seen'] != null &&
@@ -1659,7 +1720,13 @@ class _WorkbenchState extends ConsumerState<Workbench>
                     );
                     toast(tr('credentialRevoked'));
                   }),
-                  child: Text(tr('revokeCredential')),
+                  child: Text(
+                    tr(
+                      d['transport'] == 'browser_usb'
+                          ? 'usbReleaseTabs'
+                          : 'revokeCredential',
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -2068,8 +2135,22 @@ class _WorkbenchState extends ConsumerState<Workbench>
       return;
     }
     String point = requested ?? points.first['id'];
-    List<dynamic> compatibleDevices() =>
-        devices.where((d) => (d['points'] as List).contains(point)).toList();
+    List<dynamic> compatibleDevices() {
+      int rank(dynamic d) => usb.deviceId == d['id']
+          ? 0
+          : d['last_seen'] != null &&
+                DateTime.now().millisecondsSinceEpoch / 1000 -
+                        (d['last_seen'] as num) <
+                    15
+          ? 1
+          : 2;
+      final candidates = devices
+          .where((d) => (d['points'] as List).contains(point))
+          .toList();
+      candidates.sort((a, b) => rank(a).compareTo(rank(b)));
+      return candidates;
+    }
+
     device = compatibleDevices().first['id'];
     bool confirmed = false;
     final accepted = await dialog(
@@ -2081,13 +2162,19 @@ class _WorkbenchState extends ConsumerState<Workbench>
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: device,
-              decoration: InputDecoration(label: const RequiredLabel('Bridge')),
+              decoration: InputDecoration(
+                label: RequiredLabel(tr('usbInstrument')),
+              ),
               items: [
                 for (final d in compatibleDevices())
                   DropdownMenuItem(
                     value: d['id'] as String,
                     child: Text(
-                      '${d['name']} ${d['simulated'] == 1 ? tr('simulated') : ''}',
+                      '${d['name']} ${d['transport'] == 'browser_usb'
+                          ? tr('usbBrowserShort')
+                          : d['simulated'] == 1
+                          ? tr('simulated')
+                          : ''}',
                     ),
                   ),
               ],
@@ -2182,73 +2269,56 @@ class _WorkbenchState extends ConsumerState<Workbench>
     code.dispose();
   }
 
-  Future<void> downloadBridge() async {
-    final opened = await openPublicUrl(
-      landingUri(api.language).resolve(bridgeDownloadPath),
-    );
-    if (!opened && mounted) toast(tr('bridgeDownloadFailed'));
+  String usbStatus() {
+    const states = {
+      'idle': 'usbIdle',
+      'connecting': 'usbConnecting',
+      'connected': 'usbConnected',
+      'reading': 'usbReading',
+      'unsupported': 'usbUnsupported',
+      'permission_denied': 'usbPermissionDenied',
+      'port_unavailable': 'usbPortUnavailable',
+      'busy': 'usbPortUnavailable',
+      'disconnected': 'usbDisconnected',
+      'in_use': 'usbInUse',
+      'expired': 'usbExpired',
+      'backend_update': 'usbBackendUpdate',
+      'signed_out': 'usbSignedOut',
+    };
+    return tr(states[usb.state] ?? 'usbConnectionError');
   }
 
   Future<void> enroll() async {
     final name = TextEditingController();
     final calibration = TextEditingController();
-    bool simulated = false;
     final accepted = await dialog(
-      tr('registerBridge'),
-      StatefulBuilder(
-        builder: (_, update) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(tr('bridgeEnrollmentHint')),
-            TextButton.icon(
-              onPressed: downloadBridge,
-              icon: const Icon(Icons.download_outlined),
-              label: Text(tr('downloadWindowsBridge')),
-            ),
-            const SizedBox(height: 12),
-            field(name, tr('deviceName'), minLength: 2),
-            SizedBox(height: 16),
-            field(calibration, tr('calibrationIdentifier'), minLength: 3),
-            SizedBox(height: 12),
-            if (simulationAllowed)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: simulated,
-                onChanged: (v) => update(() => simulated = v),
-                title: Text(tr('simulatedDevice')),
-                subtitle: Text(tr('disableOnlyWhenUsingCalibratedInstruments')),
-              ),
-          ],
-        ),
+      tr('usbRegister'),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(tr('usbEnrollHint')),
+          const SizedBox(height: 16),
+          field(name, tr('deviceName'), minLength: 2),
+          const SizedBox(height: 16),
+          field(calibration, tr('calibrationIdentifier'), minLength: 3),
+        ],
       ),
-      tr('generateCredential'),
+      tr('usbRegister'),
     );
     if (accepted == true) {
       await action(() async {
-        final result = await api.request(
+        await api.request(
           '/devices/enroll',
           method: 'POST',
           data: {
-            'name': name.text,
-            'calibration_id': calibration.text,
+            'name': name.text.trim(),
+            'calibration_id': calibration.text.trim(),
             'points': ['TP1', 'TP2', 'TP3'],
-            'simulated': simulated,
+            'simulated': false,
+            'transport': 'browser_usb',
           },
         );
-        await showText(
-          tr('bridgeCredential'),
-          JsonEncoder.withIndent('  ').convert({
-            ...result,
-            'url': bridgeSocketUri(
-              landingUri(api.language).resolve(api.dio.options.baseUrl),
-            ).toString(),
-            'language': api.language,
-            'calibration_id': calibration.text,
-            'points': ['TP1', 'TP2', 'TP3'],
-            'simulate': simulated,
-          }),
-          tr('saveItInCredentialsJsonTheCredentialIs'),
-        );
+        toast(tr('usbRegistered'));
       });
     }
     name.dispose();

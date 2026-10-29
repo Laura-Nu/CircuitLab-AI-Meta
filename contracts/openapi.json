@@ -1849,6 +1849,199 @@
           }
         }
       }
+    },
+    "/api/v1/devices/{device_id}/browser/connect": {
+      "post": {
+        "summary": "Connect",
+        "operationId": "connect_api_v1_devices__device_id__browser_connect_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{device_id}/browser/poll": {
+      "post": {
+        "summary": "Poll",
+        "operationId": "poll_api_v1_devices__device_id__browser_poll_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserUSBLease"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{device_id}/browser/result": {
+      "post": {
+        "summary": "Result",
+        "operationId": "result_api_v1_devices__device_id__browser_result_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserUSBResult"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{device_id}/browser/disconnect": {
+      "post": {
+        "summary": "Disconnect",
+        "operationId": "disconnect_api_v1_devices__device_id__browser_disconnect_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserUSBLease"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1977,6 +2170,42 @@
         ],
         "title": "Body_upload_api_v1_sessions__session_id__evidence_post"
       },
+      "BrowserUSBLease": {
+        "properties": {
+          "lease": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 32,
+            "title": "Lease"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lease"
+        ],
+        "title": "BrowserUSBLease"
+      },
+      "BrowserUSBResult": {
+        "properties": {
+          "lease": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 32,
+            "title": "Lease"
+          },
+          "result": {
+            "$ref": "#/components/schemas/HardwareResult"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lease",
+          "result"
+        ],
+        "title": "BrowserUSBResult"
+      },
       "CloseSession": {
         "properties": {
           "version": {
@@ -2029,6 +2258,15 @@
       },
       "Enroll": {
         "properties": {
+          "transport": {
+            "type": "string",
+            "enum": [
+              "bridge",
+              "browser_usb"
+            ],
+            "title": "Transport",
+            "default": "bridge"
+          },
           "name": {
             "type": "string",
             "maxLength": 120,
@@ -2142,6 +2380,88 @@
           "conditions_confirmed"
         ],
         "title": "HardwareRequest"
+      },
+      "HardwareResult": {
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "const": "1",
+            "title": "Protocol Version"
+          },
+          "command_id": {
+            "type": "string",
+            "title": "Command Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "timeout",
+              "disconnected",
+              "out_of_range",
+              "precondition_failed"
+            ],
+            "title": "Status"
+          },
+          "point_id": {
+            "type": "string",
+            "title": "Point Id"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "const": "V",
+            "title": "Unit",
+            "default": "V"
+          },
+          "sample_count": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Sample Count"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "instrumented",
+              "simulated"
+            ],
+            "title": "Source"
+          },
+          "calibration_id": {
+            "type": "string",
+            "title": "Calibration Id"
+          },
+          "measured_at": {
+            "type": "number",
+            "title": "Measured At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "protocol_version",
+          "command_id",
+          "status",
+          "point_id",
+          "sample_count",
+          "source",
+          "calibration_id",
+          "measured_at"
+        ],
+        "title": "HardwareResult"
       },
       "InterventionCreate": {
         "properties": {

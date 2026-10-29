@@ -4,6 +4,11 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    'Registra un instrumento USB del navegador': ('browser_usb_device_required', 'Register a browser USB instrument'),
+    'La conexión USB venció; vuelve a conectar': ('browser_usb_expired', 'The USB connection expired; reconnect the instrument'),
+    'Este instrumento está conectado en otra pestaña': ('browser_usb_in_use', 'This instrument is connected in another tab'),
+    'La lectura no pertenece a esta conexión USB': ('browser_usb_result_mismatch', 'The reading does not belong to this USB connection'),
+    'El comando USB ya finalizó': ('browser_usb_command_finished', 'The USB command has already finished'),
     "La evaluación sin reparación requiere todas las lecturas dentro de rango": ("baseline_not_ready", "Baseline assessment requires every reading to be within its declared range"),
     "La prueba funcional debe realizarse después de las lecturas": ("baseline_observation_stale", "Perform the functional check after the recorded readings"),
     "Espera a que termine el trabajo activo antes de cerrar": ("close_not_available", "Wait for active work to finish before closing"),

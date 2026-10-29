@@ -235,10 +235,20 @@ class Device(Base):
     calibration_id = Column(String, nullable=False)
     simulated = Column(Integer, nullable=False, default=0)
     last_seen = Column(UTCInstant, nullable=True)
+    transport = Column(String, nullable=False, default="bridge", server_default="bridge")
+
+
+class BrowserUSBConnection(Base):
+    __tablename__ = "browser_usb_connections"
+    device_id = Column(ForeignKey("devices.id"), primary_key=True)
+    id = Column(String, nullable=False, default=uid)
+    lease_digest = Column(String, nullable=False)
+    expires = Column(UTCInstant, nullable=False)
 
 
 class Command(RecordMixin, Base):
     __tablename__ = "hardware_commands"
+    browser_connection_id = Column(String, nullable=True)
     device_id = Column(ForeignKey("devices.id"), nullable=False)
     status = Column(String, nullable=False, default="pending")
     deadline = Column(UTCInstant, nullable=False)

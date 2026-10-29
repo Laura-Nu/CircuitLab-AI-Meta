@@ -135,6 +135,7 @@ class CloseSession(Strict):
 
 
 class Enroll(Strict):
+    transport: Literal["bridge", "browser_usb"] = "bridge"
     name: str = Field(min_length=2, max_length=120)
     points: list[str] = Field(min_length=1, max_length=8)
     calibration_id: str = Field(min_length=3, max_length=120)
@@ -177,6 +178,14 @@ class HardwareResult(Strict):
         if self.status != "ok" and self.value is not None:
             raise ValueError("Un error no es una lectura")
         return self
+
+
+class BrowserUSBLease(Strict):
+    lease: str = Field(min_length=32, max_length=128)
+
+
+class BrowserUSBResult(BrowserUSBLease):
+    result: HardwareResult
 
 
 class HypothesisOutput(Strict):

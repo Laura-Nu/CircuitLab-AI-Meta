@@ -9,8 +9,14 @@ import 'core/networking/api.dart';
 import 'features/workbench.dart';
 import 'features/accounts.dart';
 import 'core/session_activity.dart';
+import 'core/browser_usb.dart';
 
 final apiProvider = Provider((ref) => CircuitApi());
+final browserUsbProvider = Provider((ref) {
+  final usb = BrowserUsbController(ref.watch(apiProvider));
+  ref.onDispose(usb.dispose);
+  return usb;
+});
 const mint = Color(0xFF6CE5BC);
 const panel = Color(0xFF151C23);
 const muted = Color(0xFF91A2AE);

@@ -27,6 +27,7 @@ from app import schemas as s
 from app.config import settings
 from app.db import (
     AuthSession,
+    BrowserUSBConnection,
     Command,
     Device,
     Evidence,
@@ -88,7 +89,7 @@ async def language_headers(request: Request, call_next):
     response.headers.setdefault("Content-Language", request_language(request))
     vary = response.headers.get("Vary", "")
     response.headers["Vary"] = ", ".join(filter(None, [vary, "Accept-Language"]))
-    if request.url.path.startswith(("/api/v1/auth/", "/api/v1/admin/")) or request.url.path == "/api/v1/workspace" or request.url.path.endswith("/progress"):
+    if request.url.path.startswith(("/api/v1/auth/", "/api/v1/admin/")) or request.url.path == "/api/v1/workspace" or request.url.path.endswith("/progress") or "/browser/" in request.url.path or request.url.path.endswith("/devices/enroll"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -796,11 +797,12 @@ def redeem(body: dict[str, str], user=Depends(current_user), db: DBSession = Dep
 def enroll(body: s.Enroll, user=Depends(current_user), db: DBSession = Depends(get_db)):
     if not set(body.points).issubset({"TP1", "TP2", "TP3"}):
         raise HTTPException(422, "Firmware v1 admite TP1, TP2, TP3")
-    if body.simulated and settings().app_env == "production":
+    if body.simulated and (settings().app_env == "production" or body.transport == "browser_usb"):
         raise HTTPException(422, "Simulación deshabilitada en producción")
     token = secrets.token_urlsafe(48)
     device = Device(
         owner_id=user.id,
+        transport=body.transport,
         name=body.name,
         points=body.points,
         calibration_id=body.calibration_id,
@@ -809,7 +811,8 @@ def enroll(body: s.Enroll, user=Depends(current_user), db: DBSession = Depends(g
     )
     db.add(device)
     db.commit()
-    return {"device_id": device.id, "device_token": token}
+    return ({"device_id": device.id, "transport": device.transport} if device.transport == "browser_usb"
+            else {"device_id": device.id, "device_token": token})
 
 
 @app.get(prefix + "/devices")
@@ -826,6 +829,13 @@ def revoke(device_id: str, user=Depends(current_user), db: DBSession = Depends(g
     if not device or device.owner_id != user.id:
         raise HTTPException(403, "Dispositivo no autorizado")
     device.token_digest = digest(secrets.token_urlsafe(48))
+    if device.transport == "browser_usb":
+        from app.browser_usb import fail_commands
+        fail_commands(db, device)
+        row = db.get(BrowserUSBConnection, device.id)
+        if row:
+            db.delete(row)
+        device.last_seen = None
     db.commit()
     return Response(status_code=204)
 
@@ -846,6 +856,10 @@ def request_hardware(
         raise HTTPException(403, "Dispositivo o punto no autorizado")
     if device.simulated and settings().app_env == "production":
         raise HTTPException(422, "Simulación deshabilitada en producción")
+    if device.transport == "browser_usb":
+        connection = db.get(BrowserUSBConnection, device.id)
+        if not connection or connection.expires <= time.time():
+            raise HTTPException(409, "La conexión USB venció; vuelve a conectar")
     if not device.last_seen or device.last_seen < time.time() - 15:
         raise HTTPException(409, "Bridge desconectado")
     active = db.scalar(
@@ -921,7 +935,7 @@ async def connect(websocket: WebSocket):
     credential = digest(auth.removeprefix("Bearer "))
     with SessionLocal() as db:
         device = db.scalar(select(Device).where(Device.token_digest == credential))
-        if not device or (device.simulated and settings().app_env == "production"):
+        if not device or device.transport != "bridge" or (device.simulated and settings().app_env == "production"):
             await websocket.close(code=4401)
             return
         device_id = device.id
@@ -970,3 +984,7 @@ async def connect(websocket: WebSocket):
                 await websocket.send_json({"error": "invalid_result"})
     except WebSocketDisconnect:
         pass
+
+
+from app.browser_usb import router as browser_usb_router  # noqa: E402
+app.include_router(browser_usb_router)
