@@ -151,3 +151,43 @@ def test_publication_preserves_previous_site_and_rolls_back_without_touching_oth
     gateway.rollback_public(previous)
     assert (old / "index.html").read_text() == "Previous"
     assert (other / "untouched").read_text() == "Keep"
+
+
+@pytest.mark.parametrize("status,stderr,expected", [
+    (255, "Host key verification failed.", "ssh_host_key"),
+    (255, "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!", "ssh_host_key"),
+    (255, 'Load key "/tmp/private": error in libcrypto', "ssh_private_key"),
+    (255, "unit@host: Permission denied (publickey).", "ssh_authentication"),
+    (255, "ssh: connect to host unit port 22: Connection refused", "ssh_connection"),
+    (255, "Disconnected without known detail", "ssh_transport"),
+    (127, "bash: circuitlab-deploy: command not found", "ssh_forced_command"),
+    (2, "/usr/bin/python3: can't open file '/var/www/circuitlab/scripts/deploy_gateway.py': No such file", "remote_gateway_missing"),
+    (1, "CircuitLab deployment failed: Project has tracked local changes; deployment refused", "dirty_checkout"),
+    (1, "CircuitLab deployment failed: Project Git operation failed; inspect the VPS privately", "remote_git_failed"),
+    (1, "CircuitLab deployment failed: ConfigurationError", "remote_configuration"),
+    (1, "CircuitLab deployment failed: DeploymentError", "remote_backend_failed"),
+    (1, "CircuitLab deployment failed: untrusted provider response", "remote_failure"),
+])
+def test_ssh_diagnostics_are_fixed_categories_and_never_forward_remote_output(status, stderr, expected):
+    sensitive = "UNIT-SECRET-MUST-NOT-APPEAR"
+    result = SimpleNamespace(returncode=status, stderr=(stderr + "\n" + sensitive).encode())
+    code, message = ci_ship.deployment_failure(result)
+    assert code == expected
+    assert sensitive not in message and sensitive not in code
+    assert "untrusted provider response" not in message
+
+
+def test_failed_shipping_cleans_key_and_reports_safe_reason_only(tmp_path, monkeypatch, capsys):
+    archive = bundle.package(REVISION, tmp_path / "site.tar.gz", public_site(tmp_path))
+    env = {"CIRCUITLAB_SSH_HOST": "vps.example.test", "CIRCUITLAB_SSH_USER": "deploy",
+           "CIRCUITLAB_SSH_KEY": "UNIT-PRIVATE-KEY", "CIRCUITLAB_SSH_KNOWN_HOSTS": "UNIT-HOST-KEY"}
+    paths = []
+    def run(args, **kwargs):
+        paths.append(Path(args[args.index("-i") + 1]))
+        return SimpleNamespace(returncode=255, stderr=b"Permission denied (publickey). UNIT-PRIVATE-KEY", stdout=b"UNIT-OTHER-SECRET")
+    monkeypatch.setattr(ci_ship.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="ssh_authentication") as failure:
+        ci_ship.ship(REVISION, archive, env)
+    assert "UNIT-PRIVATE-KEY" not in str(failure.value) and "UNIT-OTHER-SECRET" not in str(failure.value)
+    assert not paths[0].exists()
+    assert "UNIT-" not in capsys.readouterr().out

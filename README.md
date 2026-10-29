@@ -1140,3 +1140,30 @@ After activation, the workflow ships the already built website; Flutter does not
 to build on the VPS for each push. Avoid running `build_site.py` over an active release
 symlink during CI deployment. No GitHub settings, SSH keys or VPS configuration are
 created by merely pulling this repository.
+
+### Deployment failure diagnostics
+
+The CI sender reports a fixed diagnostic code and the SSH exit status on failure.
+It never forwards the SSH output, private key, environment values or provider responses
+to the Actions log. The categories include SSH host verification, private-key loading,
+authentication, connectivity, a missing forced command, dirty or divergent checkouts,
+configuration and public health verification. These are diagnostic categories, not
+proof that a deployment succeeded.
+
+For a failure before the API is updated, run these read-only checks on the VPS:
+
+```bash
+cd /var/www/circuitlab
+git status --short
+python3 scripts/deploy_vps.py --check
+ls -ld .tools/deploy/incoming
+```
+
+An incoming directory by itself does not establish a completed transfer. Its absence
+can mean failure before reception; existing entries can belong to earlier attempts.
+For `remote_git_failed`, verify the deployment account can run
+`git fetch --no-tags origin main` without an interactive prompt. For
+`ssh_authentication`, check that the public deployment key belongs to the configured
+SSH account and carries the gateway restriction. For `ssh_host_key`, compare the
+stored public host key against the trusted VPS console before changing it.
+Do not clear tracked changes or bypass host-key verification to make a deployment pass.
