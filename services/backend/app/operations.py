@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from app.config import settings
-from app.db import EmailDelivery, Event, Job, UsageCounter, WorkerHeartbeat
+from app.db import EmailDelivery, Event, Job, UsageCounter, WorkerHeartbeat, normalized_instant
 
 
 class BudgetExceeded(RuntimeError):
@@ -55,7 +55,7 @@ def functional_result(db, session):
         if (
             data.get("after") == after
             and data.get("spec_version") == session.spec_version
-            and after <= data.get("performed_at", 0) <= time.time() + 30
+            and normalized_instant(after) <= normalized_instant(data.get("performed_at", 0)) <= time.time() + 30
         ):
             return {"event_id": event.id, **data}
     return None

@@ -119,7 +119,8 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text(strings.t('purposeCheckOperation')).last);
           await tester.pumpAndSettle();
-          expect(find.byType(RequiredLabel), findsNWidgets(5));
+          expect(find.byType(RequiredLabel), findsNWidgets(6));
+          expect(find.text(strings.t('microcontrollerProject')), findsWidgets);
           final optional = find.widgetWithText(
             TextFormField,
             strings.t('optionalObservations'),
@@ -131,6 +132,8 @@ void main() {
 
           for (final entry in {
             'sessionName': 'Guided check fixture',
+            'projectSetup': 'ESP32 with temperature, RFID and GPS modules',
+            'supplyVoltageMaximum5V': '3.3',
             'whatShouldItDo': 'Output remains within the declared range',
           }.entries) {
             final field = find.widgetWithText(TextField, strings.t(entry.key));
@@ -145,6 +148,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(api.created?['purpose'], 'check_operation');
           expect(api.created?['symptoms'], '');
+          expect(api.created?['family'], 'microcontroller');
+          expect(api.created?['supply_v'], 3.3);
+          expect(api.created?['setup'], contains('ESP32'));
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         },

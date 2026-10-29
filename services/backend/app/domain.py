@@ -86,6 +86,7 @@ def serialize(row):
         from app.measurements import reading_value
         result["value"] = reading_value(row)
         result.pop("boolean_value", None)
+        result.pop("text_value", None)
     return result
 
 

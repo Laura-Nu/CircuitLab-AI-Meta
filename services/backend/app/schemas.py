@@ -53,7 +53,8 @@ class PasswordReset(Strict):
 class SessionCreate(Strict):
     language: Literal["en", "es"] | None = None
     title: str = Field(min_length=3, max_length=120)
-    family: Literal["led_resistor", "voltage_divider", "analog_sensor", "digital_signal"]
+    family: Literal["led_resistor", "voltage_divider", "analog_sensor", "digital_signal", "microcontroller", "custom"]
+    setup: str = Field(default="", max_length=2000)
     expected: str = Field(min_length=5, max_length=2000)
     purpose: Literal["diagnosis", "check_operation"] = "diagnosis"
     symptoms: str = Field(default="", max_length=2000)
@@ -68,16 +69,36 @@ class SessionCreate(Strict):
 
 
 class Point(Strict):
-    kind: Literal["supply", "sensor_signal", "dc_output", "digital_state", "custom"] = "custom"
+    kind: Literal["supply", "sensor_signal", "dc_output", "digital_state", "numeric", "text", "custom"] = "custom"
     id: str = Field(pattern=r"^TP[1-9][0-9]?$", max_length=4)
     label: str = Field(min_length=1, max_length=120)
-    value_kind: Literal["voltage", "boolean"] = "voltage"
+    value_kind: Literal["voltage", "boolean", "number", "text"] = "voltage"
     min_v: float | None = Field(default=None, ge=0, le=5)
     max_v: float | None = Field(default=None, ge=0, le=5)
     expected_state: StrictBool | None = None
+    unit: str | None = Field(default=None, min_length=1, max_length=24, pattern=r"^[^\s\x00-\x1f][^\x00-\x1f]*$")
+    min_value: float | None = None
+    max_value: float | None = None
+    expected_text: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
     def bounds(self):
+        if self.value_kind in {"number", "text"}:
+            if self.min_v is not None or self.max_v is not None or self.expected_state is not None:
+                raise ValueError("Sensor observations cannot use voltage or boolean criteria")
+            if self.value_kind == "number":
+                if (not self.unit or self.unit in {"V", "mV", "boolean", "text"}
+                        or self.min_value is None or self.max_value is None
+                        or self.min_value > self.max_value or self.expected_text is not None):
+                    raise ValueError("Numeric observations require a unit and an ordered range")
+            elif (not self.expected_text or not self.expected_text.strip() or self.min_value is not None
+                  or self.max_value is not None or self.unit not in {None, "text"}):
+                raise ValueError("Text observations require an exact expected text")
+            if self.kind not in {"custom", "numeric", "text"}:
+                raise ValueError("Sensor observation kind does not match its criteria")
+            return self
+        if any(v is not None for v in (self.unit, self.min_value, self.max_value, self.expected_text)):
+            raise ValueError("Voltage and boolean points cannot contain sensor criteria")
         if self.value_kind == "boolean":
             if self.expected_state is None or self.min_v is not None or self.max_v is not None:
                 raise ValueError("Boolean points require an expected state and no voltage limits")
@@ -112,8 +133,8 @@ class EvidenceRemoval(Strict):
 class ManualMeasurement(Strict):
     client_id: str = Field(min_length=8, max_length=80)
     point_id: str = Field(max_length=4)
-    value: float | StrictBool
-    unit: Literal["V", "mV", "boolean"] = "V"
+    value: float | StrictBool | str
+    unit: str = Field(default="V", min_length=1, max_length=24, pattern=r"^[^\s\x00-\x1f][^\x00-\x1f]*$")
     measured_at: float = Field(gt=0)
     conditions_confirmed: Literal[True]
 
@@ -124,12 +145,31 @@ class ManualMeasurement(Strict):
             value, unit = data.get("value"), data.get("unit", "V")
             if (unit == "boolean") != (type(value) is bool):
                 raise ValueError("Boolean observations require true/false and unit=boolean")
+            if unit == "text":
+                if not isinstance(value, str) or not value.strip() or len(value) > 500:
+                    raise ValueError("Text observations require nonempty text up to 500 characters")
+            elif unit != "boolean" and type(value) not in (int, float):
+                raise ValueError("Numeric observations require a JSON number")
         return data
 
     @model_validator(mode="after")
     def voltage_range(self):
-        if self.unit != "boolean" and not 0 <= self.value <= (5 if self.unit == "V" else 5000):
+        if self.unit in {"V", "mV"} and not 0 <= self.value <= (5 if self.unit == "V" else 5000):
             raise ValueError("Voltage is outside the supported range")
+        return self
+
+
+class SerialCapture(Strict):
+    client_id: str = Field(min_length=8, max_length=80)
+    baud_rate: Literal[9600, 19200, 38400, 57600, 115200]
+    lines: list[str] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def bounded_text(self):
+        if any(not line.strip() or len(line) > 500 for line in self.lines):
+            raise ValueError("Serial lines must contain 1–500 characters")
+        if sum(len(line.encode("utf-8")) for line in self.lines) > 24000:
+            raise ValueError("Serial capture is too large")
         return self
 
 

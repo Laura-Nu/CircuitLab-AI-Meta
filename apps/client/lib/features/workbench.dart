@@ -25,6 +25,7 @@ import 'bridge_setup.dart';
 import 'session_guidance.dart';
 import 'session_results.dart';
 import 'hardware_point_field.dart';
+import 'serial_monitor.dart';
 import '../core/number_format.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
@@ -44,6 +45,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
   dynamic localized(Map data, String field) =>
       (data['translations'] as Map?)?[api.language]?[field] ?? data[field];
   Map<String, String> get families => {
+    'microcontroller': tr('microcontrollerProject'),
+    'custom': tr('customProject'),
     'led_resistor': tr('ledResistor'),
     'voltage_divider': tr('voltageDivider'),
     'analog_sensor': tr('analogSensor'),
@@ -1231,6 +1234,17 @@ class _WorkbenchState extends ConsumerState<Workbench>
           busy: busy,
           onReport: () => showReport(readable: true),
         ),
+        if (editable) ...[
+          const SizedBox(height: 16),
+          SerialMonitor(
+            key: ValueKey('serial-${s['id']}'),
+            api: api,
+            sessionId: s['id'],
+            canSave: !busy && !analyzing && !sessionFinished(state) &&
+              !(s['jobs'] as List? ?? []).any((job) => ['pending', 'running'].contains(job['status'])),
+            onSaved: () => refresh(),
+          ),
+        ],
         SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -1612,6 +1626,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'session_created': tr('sessionCreated'),
         'specification_confirmed': tr('schematicAndCriteriaConfirmed'),
         'evidence_added': tr('imageAttached'),
+        'serial_captured': tr('serialCapturedEvent'),
         'connection_confirmed': tr('connectionConfirmed'),
         'measurement_recorded': tr('measurementEvent', {
           'source': AppStrings.of(context).label(e['data']['source'] ?? ''),
@@ -1626,10 +1641,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'verification_completed': tr('functionalCriteriaEvaluated'),
         'functional_check_recorded': tr('recordFunctionalTest'),
         'job_error': tr('analysisError', {
-          'error': AppStrings.of(context).label(e['data']['code']),
+          'error': AppStrings.of(context).label(e['data']['code'] ?? ''),
         }),
         'hardware_failed': tr('readingError', {
-          'error': AppStrings.of(context).label(e['data']['status']),
+          'error': AppStrings.of(context).label(e['data']['status'] ?? ''),
         }),
         'hardware_requested': tr('commandSentToBridge'),
         'hardware_result': tr('bridgeResponse'),
@@ -1771,10 +1786,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final title = TextEditingController(text: draft['title'] ?? '');
     final expected = TextEditingController(text: draft['expected'] ?? '');
     final symptoms = TextEditingController(text: draft['symptoms'] ?? '');
+    final setup = TextEditingController(text: draft['setup'] ?? '');
     final supply = TextEditingController(
-      text: formatNumber(draft['supply_v'] as num? ?? 5),
+      text: draft['supply_v'] is num ? formatNumber(draft['supply_v'] as num) : '',
     );
-    String family = draft['family'] ?? 'analog_sensor';
+    String family = draft['family'] ?? 'microcontroller';
     String purpose = draft['purpose'] ?? 'diagnosis';
     final accepted = await dialog(
       tr('newSession'),
@@ -1806,8 +1822,6 @@ class _WorkbenchState extends ConsumerState<Workbench>
               Text(tr('operationAssessmentHelp')),
             ],
             const SizedBox(height: 16),
-            field(title, tr('sessionName'), minLength: 3),
-            SizedBox(height: 16),
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: family,
@@ -1820,15 +1834,24 @@ class _WorkbenchState extends ConsumerState<Workbench>
               ],
               onChanged: (v) => update(() => family = v!),
             ),
+            const SizedBox(height: 12),
+            Text(tr('${family}Help')),
+            const SizedBox(height: 16),
+            field(setup, tr('projectSetup'), lines: 2,
+              hint: tr('${family}SetupHint'), required: ['microcontroller', 'custom'].contains(family), maxLength: 2000),
+            const SizedBox(height: 16),
+            field(title, tr('sessionName'), minLength: 3, maxLength: 120),
             SizedBox(height: 16),
             field(
               supply,
               tr('supplyVoltageMaximum5V'),
               numeric: true,
               positive: true,
+              hint: tr('supplyChoiceHint'),
             ),
             SizedBox(height: 16),
-            field(expected, tr('whatShouldItDo'), lines: 3, minLength: 5),
+            field(expected, tr('whatShouldItDo'), lines: 3, minLength: 5,
+              maxLength: 2000, hint: tr('${family}ExpectedHint')),
             SizedBox(height: 16),
             field(
               symptoms,
@@ -1840,6 +1863,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
               lines: 3,
               required: purpose == 'diagnosis',
               minLength: 5,
+              maxLength: 2000,
+              hint: tr(purpose == 'diagnosis' ? '${family}SymptomsHint' : 'optionalObservationHint'),
             ),
             SizedBox(height: 12),
             Text(
@@ -1855,6 +1880,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
       'title': title.text.trim(),
       'purpose': purpose,
       'family': family,
+      'setup': setup.text.trim(),
       'expected': expected.text.trim(),
       'symptoms': symptoms.text.trim(),
       'supply_v': double.tryParse(supply.text.replaceAll(',', '.')),
@@ -1867,7 +1893,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
         if (mounted) context.go('/?session=${s['id']}');
       });
     }
-    for (final c in [title, expected, symptoms, supply]) {
+    for (final c in [title, expected, symptoms, supply, setup]) {
       c.dispose();
     }
   }
@@ -1888,6 +1914,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
       builder: (_) => SpecificationDialog(
         specification: Map<String, dynamic>.from(session['specification']),
         supplyVoltage: (session['supply_v'] as num).toDouble(),
+        project: '${session['setup'] ?? ''}\n${session['expected']}',
       ),
     );
     if (specification == null || !mounted) return;
@@ -1943,6 +1970,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
     bool confirmed = false;
     bool? observedState;
     bool digital() => booleanPoint(s['specification'], point);
+    Map criterion() => measurementPoint(s['specification'], point);
+    bool textReading() => criterion()['value_kind'] == 'text';
+    bool sensorReading() => criterion()['value_kind'] == 'number';
     final accepted = await dialog(
       tr('recordManualVoltage'),
       StatefulBuilder(
@@ -1998,7 +2028,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 onChanged: (v) => update(() => observedState = v),
               )
             else
-              field(value, tr('readingInV05'), numeric: true),
+              field(value, textReading() ? tr('observedText') : sensorReading()
+                ? tr('readingWithUnit', {'unit': criterion()['unit']}) : tr('readingInV05'),
+                numeric: !textReading(), voltageOnly: !sensorReading(),
+                maxLength: textReading() ? 500 : null),
             SizedBox(height: 16),
             CheckboxListTile(
               subtitle: Text(tr('requiredField')),
@@ -2007,7 +2040,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
               contentPadding: EdgeInsets.zero,
               title: Text(
                 tr(
-                  digital()
+                  digital() || textReading() || sensorReading()
                       ? 'confirmBooleanObservationConditions'
                       : 'iConfirmTheInstrumentRangeCommonGndAnd',
                 ),
@@ -2031,8 +2064,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
           'point_id': point,
           'value': digital()
               ? observedState
+              : textReading() ? value.text.trim()
               : double.tryParse(value.text.replaceAll(',', '.')),
-          'unit': digital() ? 'boolean' : 'V',
+          'unit': digital() ? 'boolean' : textReading() ? 'text'
+            : sensorReading() ? criterion()['unit'] : 'V',
           'conditions_confirmed': true,
           'measured_at': DateTime.now().millisecondsSinceEpoch / 1000,
         });
@@ -2208,7 +2243,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final s = selected!;
     final points = (s['specification']['points'] as List)
         .where(
-          (p) => devices.any((d) => (d['points'] as List).contains(p['id'])),
+          (p) => ['voltage', 'boolean'].contains(p['value_kind'] ?? 'voltage') &&
+            devices.any((d) => (d['points'] as List).contains(p['id'])),
         )
         .toList();
     final requested = s['state'] == 'awaiting_measurement'
@@ -2543,15 +2579,22 @@ class _WorkbenchState extends ConsumerState<Workbench>
     bool positive = false,
     bool required = true,
     int minLength = 1,
+    int? maxLength,
+    String? hint,
+    bool voltageOnly = true,
   }) => TextFormField(
     key: ValueKey((controller, required)),
     controller: controller,
     maxLines: lines,
+    maxLength: maxLength,
     keyboardType: numeric
         ? TextInputType.numberWithOptions(decimal: true)
         : null,
     decoration: InputDecoration(
       label: required ? RequiredLabel(label) : Text(label),
+      hintText: hint,
+      hintMaxLines: 3,
+      counterText: '',
     ),
     validator: (text) {
       final value = text?.trim() ?? '';
@@ -2561,11 +2604,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
         final number = double.tryParse(value.replaceAll(',', '.'));
         if (number == null ||
             !number.isFinite ||
-            number > 5 ||
-            number < 0 ||
+            (voltageOnly && (number > 5 || number < 0)) ||
             (positive && number == 0)) {
           return tr(
-            positive ? 'positiveSupplyRequired' : 'validVoltageRequired',
+            !voltageOnly ? 'validNumberRequired' : positive ? 'positiveSupplyRequired' : 'validVoltageRequired',
           );
         }
       }

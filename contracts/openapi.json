@@ -868,6 +868,58 @@
         ]
       }
     },
+    "/api/v1/sessions/{session_id}/serial-captures": {
+      "post": {
+        "summary": "Capture Serial",
+        "operationId": "capture_serial_api_v1_sessions__session_id__serial_captures_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SerialCapture"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}": {
       "get": {
         "summary": "Get Session",
@@ -2616,17 +2668,18 @@
               },
               {
                 "type": "boolean"
+              },
+              {
+                "type": "string"
               }
             ],
             "title": "Value"
           },
           "unit": {
             "type": "string",
-            "enum": [
-              "V",
-              "mV",
-              "boolean"
-            ],
+            "maxLength": 24,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f][^\\x00-\\x1f]*$",
             "title": "Unit",
             "default": "V"
           },
@@ -2684,6 +2737,8 @@
               "sensor_signal",
               "dc_output",
               "digital_state",
+              "numeric",
+              "text",
               "custom"
             ],
             "title": "Kind",
@@ -2705,7 +2760,9 @@
             "type": "string",
             "enum": [
               "voltage",
-              "boolean"
+              "boolean",
+              "number",
+              "text"
             ],
             "title": "Value Kind",
             "default": "voltage"
@@ -2746,6 +2803,55 @@
               }
             ],
             "title": "Expected State"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 24,
+                "minLength": 1,
+                "pattern": "^[^\\s\\x00-\\x1f][^\\x00-\\x1f]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "min_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Value"
+          },
+          "max_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Value"
+          },
+          "expected_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Text"
           }
         },
         "additionalProperties": false,
@@ -2776,6 +2882,44 @@
         "type": "object",
         "title": "Refresh"
       },
+      "SerialCapture": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Client Id"
+          },
+          "baud_rate": {
+            "type": "integer",
+            "enum": [
+              9600,
+              19200,
+              38400,
+              57600,
+              115200
+            ],
+            "title": "Baud Rate"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "client_id",
+          "baud_rate",
+          "lines"
+        ],
+        "title": "SerialCapture"
+      },
       "SessionCreate": {
         "properties": {
           "language": {
@@ -2805,9 +2949,17 @@
               "led_resistor",
               "voltage_divider",
               "analog_sensor",
-              "digital_signal"
+              "digital_signal",
+              "microcontroller",
+              "custom"
             ],
             "title": "Family"
+          },
+          "setup": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Setup",
+            "default": ""
           },
           "expected": {
             "type": "string",

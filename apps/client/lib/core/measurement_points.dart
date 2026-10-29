@@ -3,6 +3,8 @@ const measurementPointKinds = <String, String>{
   'sensor_signal': 'measurementKindSensor',
   'dc_output': 'measurementKindDcOutput',
   'digital_state': 'measurementKindDigital',
+  'numeric': 'measurementKindNumber',
+  'text': 'measurementKindText',
   'custom': 'measurementKindCustom',
 };
 

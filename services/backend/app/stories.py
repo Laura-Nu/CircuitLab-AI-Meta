@@ -30,7 +30,7 @@ English and Spanish must convey the same claims. Return submit_circuit_story.
 
 def source_snapshot(db, session):
     facts = [{"id": "specification", "kind": "specification", "data": {
-        "family": session.family, "expected": session.expected, "symptoms": session.symptoms,
+        "family": session.family, "expected": session.expected, "symptoms": session.symptoms, "setup": session.setup,
         "supply_v": session.supply_v, "specification": session.specification,
     }}]
     for model, kind, limit in (

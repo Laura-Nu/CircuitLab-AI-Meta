@@ -349,6 +349,9 @@ def test_delayed_older_reading_cannot_replace_the_latest_post_intervention_obser
         latest = db.scalar(
             select(Measurement).where(Measurement.session_id == sid, Measurement.phase == "verification")
         )
+        # Keep observation times distinct even when the host clock returns the
+        # same tick for intervention and acquisition. Arrival order is not capture order.
+        latest.measured_at = session.pending_test["after"] + 1
         db.add(
             Measurement(
                 session_id=sid,

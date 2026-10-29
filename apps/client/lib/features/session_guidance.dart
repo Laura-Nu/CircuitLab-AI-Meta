@@ -182,7 +182,11 @@ class SessionGuidance extends StatelessWidget {
             missing.isNotEmpty ||
             checks.isEmpty) {
           button('recordMeasurement', onManual, Icons.speed_outlined);
-          button('readUsingBridge', onBridge, Icons.usb, filled: false);
+          final points = (session['specification']?['points'] as List? ?? []);
+          if (points.any((p) => ['voltage', 'boolean'].contains(p['value_kind'] ?? 'voltage') &&
+              (state != 'awaiting_measurement' || p['id'] == plan['point_id']))) {
+            button('readUsingBridge', onBridge, Icons.usb, filled: false);
+          }
         } else if (functional == null) {
           button(
             'recordFunctionalTest',

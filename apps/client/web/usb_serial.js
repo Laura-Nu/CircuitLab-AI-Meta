@@ -6,11 +6,18 @@
   const seen = new Map();
   const openingPorts = new Set();
   let generation = 0, starting = null;
+  let monitor = false, serialLines = [], serialBytes = 0, serialSequence = 0, dropped = 0;
   const api = {
     get supported() { return !!(globalThis.isSecureContext && navigator.serial?.requestPort); },
     onDisconnect: null,
     onState: null,
-    async connect() {
+    async connect(optionsRaw) {
+      let options = {};
+      try { options = optionsRaw ? JSON.parse(optionsRaw) : {}; }
+      catch (_) { return JSON.stringify({status: "port_unavailable"}); }
+      const passive = options.mode === "monitor";
+      const baudRate = passive ? options.baud_rate : 115200;
+      if (![9600,19200,38400,57600,115200].includes(baudRate)) return JSON.stringify({status: "port_unavailable"});
       if (!api.supported) return JSON.stringify({status: "unsupported"});
       if (port || closing || starting !== null || openingPorts.size) return JSON.stringify({status: "busy"});
       const attempt = ++generation;
@@ -24,7 +31,7 @@
         stage("opening_port");
         openingPorts.add(selected);
         let opened;
-        try { opened = Promise.resolve(selected.open({baudRate: 115200, bufferSize: 4096})); }
+        try { opened = Promise.resolve(selected.open({baudRate, bufferSize: 4096})); }
         catch (error) { openingPorts.delete(selected); throw error; }
         // A driver operation cannot be cancelled. Close it if it succeeds after cancellation/timeout.
         void opened.then(async () => {
@@ -36,6 +43,7 @@
         await bounded(opened, 10000, "open_timeout");
         if (generation !== attempt) return JSON.stringify({status: "cancelled"});
         port = selected; buffer = ""; seen.clear();
+        monitor = passive; serialLines = []; serialBytes = 0; serialSequence = 0; dropped = 0;
         if (!port.readable || !port.writable) throw {code: "port_unavailable"};
         stage("starting_instrument");
         reading = readLoop(selected, attempt);
@@ -59,6 +67,13 @@
         if (starting === attempt) starting = null;
       }
     },
+    connectMonitor(baudRate) {
+      return api.connect(JSON.stringify({mode: "monitor", baud_rate: baudRate}));
+    },
+    monitorSnapshot() {
+      return JSON.stringify({connected: !!port && monitor, sequence: serialSequence,
+        lines: serialLines.map(item => item.text), dropped});
+    },
     async disconnect() {
       ++generation;
       starting = null;
@@ -72,10 +87,12 @@
         try { await bounded(Promise.resolve(reading), 1500, "cleanup_timeout"); } catch (_) {}
         try { await bounded(Promise.resolve(previous?.close()), 1500, "cleanup_timeout"); } catch (_) {}
         reading = null; buffer = ""; seen.clear();
+        monitor = false; serialLines = []; serialBytes = 0;
       })();
       try { await closing; } finally { closing = null; }
     },
     async read(raw, allowedRaw) {
+      if (monitor) return JSON.stringify({status: "precondition_failed", sample_count: 0});
       let command, allowed;
       try { command = JSON.parse(raw); allowed = JSON.parse(allowedRaw); }
       catch (_) { return JSON.stringify({status: "precondition_failed", sample_count: 0}); }
@@ -116,6 +133,17 @@
     request.resolve(result);
   }
   function line(raw) {
+    if (monitor) {
+      const text = raw.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim();
+      if (!text) return;
+      if (text.length > 500) { ++dropped; return; }
+      const bytes = new TextEncoder().encode(text).length;
+      serialLines.push({text, bytes}); serialBytes += bytes; ++serialSequence;
+      while (serialLines.length > 100 || serialBytes > 24000) {
+        serialBytes -= serialLines.shift().bytes; ++dropped;
+      }
+      return;
+    }
     if (!pending) return;
     let result;
     try { result = JSON.parse(raw); } catch (_) { return; }

@@ -23,12 +23,49 @@ function fixture(reply, requestError) {
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/usb_serial.js'),'utf8'),sandbox);
-  return {api:sandbox.circuitLabUsb,writes,sandbox,events,port};
+  return {api:sandbox.circuitLabUsb,writes,sandbox,events,port,
+    sendText(text) {input.enqueue(new TextEncoder().encode(text));}};
 }
 const command={protocol_version:'1',command_id:'SYNTHETIC-protocol-fixture',device_id:'fixture',session_id:'fixture',
   action:'read_voltage',point_id:'TP1',sample_count:20,deadline_ms:1000};
 const good=(c)=>({command_id:c.command_id,point_id:c.point_id,status:'ok',sample_count:20,value:2.5});
 const send=(input,value)=>input.enqueue(new TextEncoder().encode(JSON.stringify(value)+'\n'));
+
+test('Board monitor reads actual multi-sensor serial output without writing commands',async()=>{
+  const f=fixture(); let speed;
+  f.port.open=async(options)=>{speed=options.baudRate;};
+  assert.equal(JSON.parse(await f.api.connectMonitor(9600)).status,'connected');
+  f.sendText('DHT11 temperature=23.');
+  f.sendText('5 C humidity=48 %\r\nRFID detected=true\nGPS fix=false\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const snapshot=JSON.parse(f.api.monitorSnapshot());
+  assert.equal(speed,9600); assert.equal(snapshot.connected,true);
+  assert.deepEqual(snapshot.lines,['DHT11 temperature=23.5 C humidity=48 %','RFID detected=true','GPS fix=false']);
+  assert.equal(snapshot.sequence,3); assert.equal(f.writes.length,0);
+  assert.equal(JSON.parse(await f.api.read(JSON.stringify(command),'["TP1"]')).status,'precondition_failed');
+  await f.api.disconnect();
+  assert.deepEqual(JSON.parse(f.api.monitorSnapshot()).lines,[]);
+});
+
+test('Board monitor has bounded output and does not invent readings on silence',async()=>{
+  const f=fixture(); await f.api.connectMonitor(115200);
+  assert.deepEqual(JSON.parse(f.api.monitorSnapshot()).lines,[]);
+  for(let i=0;i<120;i++) f.sendText('sensor sample '+i+'\n');
+  f.sendText('x'.repeat(501)+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const snapshot=JSON.parse(f.api.monitorSnapshot());
+  assert.equal(snapshot.lines.length,100); assert.equal(snapshot.dropped,21);
+  assert.equal(f.writes.length,0); await f.api.disconnect();
+});
+
+test('Board monitor rejects unsupported baud rates and shares the exclusive port',async()=>{
+  const f=fixture();
+  assert.equal(JSON.parse(await f.api.connectMonitor(123)).status,'port_unavailable');
+  await f.api.connect();
+  assert.equal(JSON.parse(await f.api.connectMonitor(9600)).status,'busy');
+  assert.equal(JSON.parse(f.api.monitorSnapshot()).connected,false);
+  await f.api.disconnect();
+});
 test('Actual framing handles partial lines and never reacquires a duplicate command',async()=>{
   const f=fixture((c,input)=>{
     const text=JSON.stringify(good(c))+'\n';

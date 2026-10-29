@@ -7,6 +7,8 @@ external _SerialApi get _serial;
 extension type _SerialApi._(JSObject _) implements JSObject {
   external bool get supported;
   external JSPromise<JSString> connect();
+  external JSPromise<JSString> connectMonitor(JSNumber baudRate);
+  external JSString monitorSnapshot();
   external JSPromise<JSAny?> disconnect();
   external JSPromise<JSString> read(JSString command, JSString points);
   external set onDisconnect(JSFunction? callback);
@@ -27,6 +29,12 @@ class UsbSerialPort {
 
   Future<Map<String, dynamic>> connect() async => Map<String, dynamic>.from(
     jsonDecode((await _serial.connect().toDart).toDart),
+  );
+  Future<Map<String, dynamic>> connectMonitor(int baudRate) async => Map<String, dynamic>.from(
+    jsonDecode((await _serial.connectMonitor(baudRate.toJS).toDart).toDart),
+  );
+  Map<String, dynamic> monitorSnapshot() => Map<String, dynamic>.from(
+    jsonDecode(_serial.monitorSnapshot().toDart),
   );
   Future<Map<String, dynamic>> read(Map command, List points) async =>
       Map<String, dynamic>.from(

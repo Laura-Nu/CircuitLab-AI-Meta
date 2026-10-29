@@ -9,7 +9,7 @@ The local preview runs in explicitly labeled simulation mode.
 
 ## What it does
 
-- Organizes private investigations for LED/resistor circuits, resistive dividers and analog sensors.
+- Organizes private investigations for Arduino/ESP32 and other boards with multiple modules, custom low-voltage projects, LED/resistor circuits, dividers and analog/digital sensors.
 - Combines photographs, confirmed connections and authorized test points with competing fault hypotheses.
 - Explains the next useful measurement and the different outcomes predicted by each hypothesis.
 - Records manual or instrumented readings, including their source and calibration identifier.
@@ -22,7 +22,7 @@ The local preview runs in explicitly labeled simulation mode.
 ## Investigation workflow
 
 1. Describe the intended behavior, observed symptoms and supply voltage.
-2. Confirm connections, operating conditions and up to three test points with acceptable voltage ranges.
+2. Confirm connections, operating conditions and up to eight observations: voltage ranges, numeric sensor values with units, boolean states or exact text/codes.
 3. Attach circuit photographs and request analysis. The specification is frozen when analysis starts.
 4. Review competing explanations, predicted outcomes and the proposed measurement or clarification.
 5. Confirm the measurement conditions and record a manual reading or request an instrument reading.
@@ -181,7 +181,7 @@ does not issue a new inference request: model responses retain both translations
 
 Administrators create and manage accounts from the laboratory's Users panel.
 Role/status changes revoke sessions; deactivation also revokes device credentials.
-There is no public registration endpoint.
+Public registration creates member accounts; only administrators can assign administrative roles.
 
 ```dotenv
 RECOVERY_DELIVERY=resend
@@ -210,6 +210,48 @@ Model API and is only needed for real story generation. Leave it empty with
 not authenticate this endpoint. The local launcher can provide a labeled simulation preview.
 
 ## Hardware
+
+### Boards with multiple sensors and modules
+
+Choose **Board with sensors and modules** for Arduino, ESP32 or another controller.
+Name the actual board, sensors, readers and interfaces in the setup field. The form's
+examples follow the selected project type; examples never become observed facts.
+Supply voltage is entered explicitly, with no assumed 5 V value. Individual module
+supplies and logic-level requirements belong in the confirmed connections.
+
+Define observations according to the actual data: temperature in `°C`, humidity in `%`,
+card detection or GPS fix as booleans, or a known RFID identifier/status as exact text.
+Numeric data use finite minimum/maximum criteria in their declared units. Text compares
+exactly, including case. A successful whole-project functional observation is still
+required to finish. Existing voltage and boolean investigations remain compatible.
+
+Inside the session, **Board USB · Data monitor** reads the board's existing serial
+output at the selected baud rate. It is passive: it sends no acquisition commands,
+uploads no sketch and does not discover connected sensors. Its firmware must already
+emit actual sensor values or status lines, for example with `Serial.println`.
+Close another IDE serial monitor before connecting. Browser serial access requires
+a supported desktop browser and a secure context. Android retains manual recording.
+
+Use **Save capture for analysis** to store the current bounded output in the private
+session. Up to 100 complete lines / 24 KB are retained; lines over 500 characters are
+skipped. The API permits twenty captures per session and includes the latest five in
+the diagnostic context. Captures are deduplicated by client ID and cannot be added
+during active inference. Saved captures remain readable in session results and reports.
+Firmware text is untrusted evidence, not an independently calibrated measurement or
+automatic repair verification. Record requested observations explicitly to check criteria.
+
+The separate **USB instrument** path continues to use the fixed TP1/A0, TP2/A1,
+TP3/A2 ADC/GPIO protocol. It does not measure temperature, decode RFID/SPI, or turn
+GPS serial output into a position. A passive monitor and an instrument connection
+cannot own the same port concurrently. Hiding the tab or signing out stops acquisition.
+
+Deploy migration **0010** with the backend before publishing this client. GitHub Actions
+builds Flutter remotely; no workstation Flutter installation is required. The committed
+Android APK is a separate signed artifact and is not rebuilt by this workflow.
+
+Primary references: [Arduino serial output](https://docs.arduino.cc/language-reference/en/functions/communication/serial/println/),
+[ESP32 serial console](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c3/api-guides/usb-serial-jtag-console.html),
+[browser serial requirements](https://developer.chrome.com/docs/capabilities/serial).
 
 Investigations support 1–8 authorized test points. The bilingual specification editor
 adds and removes point rows without renaming the remaining points; criteria freeze

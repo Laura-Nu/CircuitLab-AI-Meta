@@ -36,6 +36,7 @@ def fail_commands(db, device):
         accept_result(db, device, HardwareResult(
             protocol_version="1", command_id=command.id, point_id=command.payload["point_id"],
             status="disconnected", sample_count=0, source="instrumented", calibration_id=device.calibration_id,
+            unit="boolean" if command.payload["action"] == "read_digital" else "V",
             measured_at=time.time(),
         ))
 

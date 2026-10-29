@@ -5,15 +5,16 @@ LIMITATIONS = {
     "es": [
         "Solo familias y puntos confirmados; no acredita conexiones ocultas.",
         "Las lecturas manuales y simuladas conservan su origen.",
-        "La verificación combina los criterios eléctricos declarados con la prueba funcional registrada por la persona.",
+        "La verificación combina los criterios declarados de lecturas y datos con la prueba funcional registrada por la persona.",
     ],
     "en": [
         "Only confirmed circuit families and points; hidden connections are not established.",
         "Manual and simulated readings retain their source labels.",
-        "Verification combines the declared electrical criteria with the operator-recorded functional test.",
+        "Verification combines the declared reading and data criteria with the operator-recorded functional test.",
     ],
 }
 EVENTS = {
+    "serial_captured": ("Captura serial guardada", "Serial capture saved"),
     "baseline_functional_check_recorded": ("Comprobación funcional sin reparación", "Functional check without repair"),
     "baseline_assessment_completed": ("Evaluación sin reparación finalizada", "Baseline assessment completed"),
     "investigation_closed": ("Investigación cerrada sin verificar", "Investigation closed without verification"),
@@ -87,11 +88,17 @@ def render_markdown(report, language, *, technical_details=False):
     def render_observation(value, unit="V"):
         if unit == "boolean":
             return "—" if value is None else "true" if value is True else "false"
-        return f"{number(value)} V"
+        if unit == "text":
+            return safe_text(value) if value is not None else "—"
+        return f"{number(value)} {safe_text(unit)}"
 
     def criterion(point):
         if point.get("value_kind") == "boolean" or point.get("unit") == "boolean":
             return text("Estado esperado: ", "Expected state: ") + render_observation(point.get("expected_state"), "boolean")
+        if point.get("value_kind") == "text":
+            return text("Texto esperado: ", "Expected text: ") + safe_text(point.get("expected_text", ""))
+        if point.get("value_kind") == "number":
+            return f"{number(point['min_value'])}–{number(point['max_value'])} {safe_text(point['unit'])}"
         return f"{number(point['min_v'])}–{number(point['max_v'])} V"
 
     yes, no = text("Sí", "Yes"), text("No", "No")
@@ -110,6 +117,7 @@ def render_markdown(report, language, *, technical_details=False):
         if report["diagnosis_mode"] == "simulation"
         else text("Diagnóstico asistido", "Assisted diagnosis") if not technical_details else "Meta",
         f"{text('Alimentación', 'Supply')}: {number(report['supply_v'])} V",
+        f"{text('Placa y módulos', 'Board and modules')}: {safe_text(report.get('setup', ''))}",
         "",
         report["presentation"]["original_content_notice"],
         "",
@@ -129,6 +137,12 @@ def render_markdown(report, language, *, technical_details=False):
     lines += ["", f"## {text('Evidencia', 'Evidence')}"]
     for item in report["evidence"]:
         lines.append(f"- {item['id']} · {item['mime']} · SHA-256: {item['sha256']}")
+    for event in report["events"]:
+        if event["kind"] == "serial_captured":
+            lines += ["", text("### Captura serial reportada por el firmware", "### Firmware-reported serial capture"),
+                      text("Contexto para análisis; no verifica una reparación por sí solo.",
+                           "Analysis context; does not verify a repair by itself."),
+                      *("    " + safe_text(line) for line in event["data"]["lines"])]
     for item in report.get("removed_evidence", []):
         lines.append(f"- {text('RETIRADA', 'WITHDRAWN')}: {item['id']} · SHA-256: {item['sha256']}")
     if report.get("evidence_review_required"):

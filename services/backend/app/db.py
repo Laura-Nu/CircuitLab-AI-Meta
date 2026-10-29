@@ -45,6 +45,11 @@ class UTCInstant(TypeDecorator):
         return value.replace(tzinfo=UTC).timestamp() if value.tzinfo is None else value.timestamp()
 
 
+def normalized_instant(value):
+    """Use the persisted timestamp precision for thresholds stored inside JSON."""
+    return datetime.fromtimestamp(value, UTC).timestamp()
+
+
 Payload = JSON().with_variant(JSONB(), "postgresql")
 
 
@@ -127,6 +132,7 @@ class Session(Base):
     family = Column(String, nullable=False)
     expected = Column(String, nullable=False)
     symptoms = Column(String, nullable=False)
+    setup = Column(String, nullable=False, default="", server_default="")
     purpose = Column(String(20), nullable=False, default="diagnosis", server_default="diagnosis")
     supply_v = Column(Float, nullable=False)
     diagnosis_mode = Column(String, nullable=False, default=lambda: settings().ai_mode)
@@ -171,6 +177,7 @@ class Measurement(RecordMixin, Base):
     point_id = Column(String, nullable=False)
     value = Column(Float, nullable=True)
     boolean_value = Column(Boolean, nullable=True)
+    text_value = Column(String(500), nullable=True)
     unit = Column(String, nullable=False, default="V")
     source = Column(String, nullable=False)
     measured_at = Column(UTCInstant, nullable=False)

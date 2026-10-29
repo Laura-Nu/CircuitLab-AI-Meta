@@ -62,6 +62,22 @@ class SessionResults extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(strings.t('sessionReadingsCount', {'count': readings.length})),
+            if ((session['serial_captures'] as List? ?? []).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(strings.t('serialSavedCaptures', {
+                'count': (session['serial_captures'] as List).length,
+              })),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(strings.t('serialLatestCapture')),
+                children: [ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(child: SelectableText(
+                    ((session['serial_captures'] as List).first['data']['lines'] as List).join('\n'),
+                  )),
+                )],
+              ),
+            ],
             if (latest != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -76,7 +92,7 @@ class SessionResults extends StatelessWidget {
                     ),
                     'value': latest['unit'] == 'boolean'
                         ? strings.booleanValue(latest['value'])
-                        : strings.number(latest['value'] as num),
+                        : strings.observation(latest['value'], latest['unit'] ?? 'V'),
                     'source': strings.label(latest['source']),
                   },
                 ),

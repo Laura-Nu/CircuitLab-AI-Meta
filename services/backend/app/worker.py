@@ -17,6 +17,7 @@ from app.db import (
     Storyboard,
     Verification,
     uid,
+    normalized_instant,
 )
 from app.domain import record, serialize, transition
 from app.completion import baseline_ready
@@ -63,6 +64,7 @@ def snapshot(db, session):
         "purpose": session.purpose,
         "expected": session.expected,
         "symptoms": session.symptoms,
+        "setup": session.setup,
         "supply_v": session.supply_v,
         "specification": session.specification,
         "evidence": [
@@ -80,6 +82,11 @@ def snapshot(db, session):
             h.data for h in db.scalars(select(Hypothesis).where(Hypothesis.session_id == session.id))
             if not h.data.get("withdrawn_context")
         ],
+        "serial_captures": [
+            {"id": e.id, **e.data} for e in db.scalars(select(Event).where(
+                Event.session_id == session.id, Event.kind == "serial_captured",
+            ).order_by(Event.sequence.desc()).limit(5))
+        ],
         "test_catalog": [localized_voltage_test(session.language), localized_digital_test(session.language)],
         "connection_confirmations": [
             e.data
@@ -91,7 +98,7 @@ def snapshot(db, session):
 
 
 def validate_plan(output, context):
-    known = {r["id"] for r in context["evidence"] + context["measurements"]}
+    known = {r["id"] for r in context["evidence"] + context["measurements"] + context.get("serial_captures", [])}
     measurements = {r["id"] for r in context["measurements"]}
     for hypothesis in output.hypotheses:
         if not set(hypothesis.evidence_ids).issubset(known):
@@ -107,6 +114,8 @@ def validate_plan(output, context):
         raise ValueError("Una medición requiere un punto autorizado")
     if output.action in {"read_voltage", "read_digital"} and output.point_id is not None:
         point = next(p for p in context["specification"]["points"] if p["id"] == output.point_id)
+        if point.get("value_kind", "voltage") not in {"voltage", "boolean"}:
+            raise ValueError("Sensor quantities require request_manual_measurement, not an ADC or GPIO read")
         if point_is_boolean(point) != (output.action == "read_digital"):
             raise ValueError("The requested procedure does not match the authorized observation type")
     if output.action == "propose_intervention" and not any(
@@ -123,7 +132,7 @@ def evaluate(db, session):
             .order_by(Measurement.measured_at, Measurement.created_at)
         )
     )
-    latest = {m.point_id: m for m in readings if m.measured_at >= session.pending_test["after"]}
+    latest = {m.point_id: m for m in readings if m.measured_at >= normalized_instant(session.pending_test["after"])}
     checks = [point_check(point, latest.get(point["id"])) for point in session.specification["points"]]
     functional = functional_result(db, session)
     electrical_passed = all(c["passed"] for c in checks)

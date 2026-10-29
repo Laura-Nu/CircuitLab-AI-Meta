@@ -4,6 +4,9 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "Máximo 20 capturas seriales por sesión": ("serial_capture_limit", "At most 20 serial captures per session"),
+    "Este dato requiere una lectura del sensor; el instrumento solo mide voltaje o estado digital": (
+        "sensor_reading_required", "This value requires a sensor observation; the instrument only reads voltage or digital state"),
     "La foto fue retirada; vuelve a intentar para completar el borrado del archivo": (
         "evidence_cleanup_pending",
         "The photo was withdrawn; retry deletion to finish removing the stored file",
@@ -188,6 +191,8 @@ LABELS = {
     "voltage_divider": ("Divisor resistivo", "Voltage divider"),
     "digital_signal": ("Señal lógica digital", "Digital logic signal"),
     "analog_sensor": ("Sensor analógico", "Analog sensor"),
+    "microcontroller": ("Placa con sensores y módulos", "Board with sensors and modules"),
+    "custom": ("Otro proyecto electrónico", "Other electronic project"),
     "proposed": ("Propuesta", "Proposed"),
     "compatible": ("Compatible", "Compatible"),
     "contradicted": ("Contradicha", "Contradicted"),

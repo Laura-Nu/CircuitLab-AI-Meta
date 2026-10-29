@@ -129,7 +129,7 @@ void main() {
           find.text(
             strings.t('latestRecordedReading', {
               'point': 'Supply',
-              'value': '5',
+              'value': '5 V',
               'source': strings.label('simulated'),
             }),
           ),

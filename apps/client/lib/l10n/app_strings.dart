@@ -29,13 +29,18 @@ class AppStrings {
       ? t('readingStillNeeded')
       : unit == 'boolean'
       ? booleanValue(value)
-      : '${number(value as num)} V';
+      : unit == 'text' ? value.toString()
+      : '${number(value as num)} $unit';
 
   String criterion(Map point) =>
       point['value_kind'] == 'boolean' || point['unit'] == 'boolean'
       ? t('expectedBooleanState', {
           'state': booleanValue(point['expected_state']),
         })
+      : point['value_kind'] == 'text'
+      ? t('expectedText', {'value': point['expected_text']})
+      : point['value_kind'] == 'number'
+      ? '${number(point['min_value'] as num)}–${number(point['max_value'] as num)} ${point['unit']}'
       : '${number(point['min_v'] as num)}–${number(point['max_v'] as num)} V';
 
   String label(String code) =>

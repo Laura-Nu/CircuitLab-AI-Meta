@@ -47,6 +47,7 @@ from app.db import (
     Verification,
     get_db,
     uid,
+    normalized_instant,
 )
 from app.domain import authorized, commit, enqueue, record, serialize, transition
 from app.completion import baseline_ready, completion_status, voltage_checks
@@ -326,7 +327,37 @@ def details(db, session):
     } for e in db.scalars(select(Evidence).where(
         Evidence.session_id == session.id, Evidence.removed_at.is_not(None)))]
     result["completion"] = completion_status(db, session)
+    result["serial_captures"] = [serialize(e) for e in db.scalars(select(Event).where(
+        Event.session_id == session.id, Event.kind == "serial_captured",
+    ).order_by(Event.sequence.desc()).limit(5))]
     return result
+
+
+@app.post(prefix + "/sessions/{session_id}/serial-captures", status_code=201)
+def capture_serial(session_id: str, body: s.SerialCapture,
+                   user=Depends(current_user), db: DBSession = Depends(get_db)):
+    session = authorized(db, session_id, user, write=True)
+    existing = db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.kind == "serial_captured",
+        Event.data["client_id"].as_string() == body.client_id,
+    ))
+    if existing:
+        return serialize(existing)
+    if session.state in {"resolved", "no_fault_found", "inconclusive", "cancelled"}:
+        raise HTTPException(409, "La sesión no admite evidencia en este estado")
+    if db.scalar(select(Job.id).where(Job.session_id == session.id, Job.status.in_(["pending", "running"])).limit(1)):
+        raise HTTPException(409, "Ya existe un trabajo pendiente")
+    count = db.scalar(select(func.count(Event.id)).where(
+        Event.session_id == session.id, Event.kind == "serial_captured"))
+    if count >= 20:
+        raise HTTPException(422, "Máximo 20 capturas seriales por sesión")
+    record(db, session, "serial_captured", {
+        **body.model_dump(), "source": "serial_reported", "captured_at": time.time(),
+        "physical_verification": False,
+    })
+    commit(db)
+    return serialize(db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.sequence == session.version)))
 
 
 @app.get(prefix + "/sessions/{session_id}")
@@ -535,6 +566,7 @@ def events(session_id: str, after: int = 0, user=Depends(current_user), db: DBSe
 
 
 def validate_measurement(session, point_id, measured_at):
+    measured_at = normalized_instant(measured_at)
     if point_id not in {p["id"] for p in session.specification.get("points", [])}:
         raise HTTPException(422, "Punto no autorizado por el esquema")
     if measured_at > time.time() + 30 or measured_at < session.created_at:
@@ -545,7 +577,7 @@ def validate_measurement(session, point_id, measured_at):
         raise HTTPException(422, "Registra el punto solicitado por la prueba")
     if session.state == "verifying":
         intervention = session.pending_test or {}
-        if measured_at < intervention.get("after", time.time()):
+        if measured_at < normalized_instant(intervention.get("after", time.time())):
             raise HTTPException(422, "La verificación requiere lecturas posteriores a la intervención")
 
 
@@ -583,7 +615,7 @@ def manual(
     validate_measurement(session, body.point_id, body.measured_at)
     session.language = language
     point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
-    if point_unit(point) != ("boolean" if body.unit == "boolean" else "V"):
+    if point_unit(point) != ("V" if body.unit == "mV" else body.unit):
         raise HTTPException(422, "La unidad no coincide con el tipo de medición del esquema")
     value = body.value / 1000 if body.unit == "mV" else body.value
     measurement = Measurement(
@@ -592,7 +624,7 @@ def manual(
         point_id=body.point_id,
         **observation_fields(value, body.unit),
         source="manual",
-        measured_at=body.measured_at,
+        measured_at=normalized_instant(body.measured_at),
         phase="verification" if session.state == "verifying" else "diagnosis",
     )
     measurement_added(db, session, measurement)
@@ -611,7 +643,7 @@ def intervention(
     db.add(row)
     db.flush()
     session.pending_test = {
-        "after": row.created_at,
+        "after": normalized_instant(row.created_at),
         "intervention_id": row.id,
         "instruction": session.specification["functional_description"],
     }
@@ -652,7 +684,7 @@ def record_functional_check(
     if existing:
         return {"event_id": existing.id, **existing.data}
     after = session.pending_test["after"]
-    if not after <= body.performed_at <= time.time() + 30:
+    if not normalized_instant(after) <= normalized_instant(body.performed_at) <= time.time() + 30:
         raise HTTPException(422, "La prueba funcional debe realizarse después de la intervención")
     data = {
         **body.model_dump(exclude={"confirmed"}), "after": after,
@@ -681,7 +713,7 @@ def verify(session_id: str, user=Depends(current_user), db: DBSession = Depends(
     if functional_result(db, session) is None:
         raise HTTPException(409, "Registra el resultado de la prueba funcional antes de verificar")
     missing = {p["id"] for p in session.specification["points"]} - {
-        m.point_id for m in measurements if m.measured_at >= session.pending_test["after"]
+        m.point_id for m in measurements if m.measured_at >= normalized_instant(session.pending_test["after"])
     }
     if missing:
         raise HTTPException(409, f"Faltan medidas posteriores para: {', '.join(sorted(missing))}")
@@ -705,7 +737,7 @@ def baseline_check(
     if session.state not in {"inconclusive", "awaiting_functional_check"} or not baseline_ready(db, session):
         raise HTTPException(409, "La evaluación sin reparación requiere todas las lecturas dentro de rango")
     checks = voltage_checks(db, session)
-    if not max(c["measured_at"] for c in checks) <= body.performed_at <= time.time() + 30:
+    if not max(c["measured_at"] for c in checks) <= normalized_instant(body.performed_at) <= time.time() + 30:
         raise HTTPException(422, "La prueba funcional debe realizarse después de las lecturas")
     if session.state == "inconclusive":
         transition(db, session, "awaiting_functional_check", "baseline_review_requested")
@@ -884,6 +916,8 @@ def request_hardware(
         raise HTTPException(409, "Ya existe un comando pendiente")
     command_id = uid()
     point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
+    if point.get("value_kind", "voltage") not in {"voltage", "boolean"}:
+        raise HTTPException(422, "Este dato requiere una lectura del sensor; el instrumento solo mide voltaje o estado digital")
     payload = s.HardwareCommand(
         command_id=command_id, session_id=session_id, device_id=device.id, point_id=body.point_id,
         action="read_digital" if point_unit(point) == "boolean" else "read_voltage",

@@ -7,10 +7,12 @@ import '../core/measurement_points.dart';
 class SpecificationDialog extends StatefulWidget {
   final Map<String, dynamic> specification;
   final double supplyVoltage;
+  final String project;
   const SpecificationDialog({
     super.key,
     required this.specification,
     required this.supplyVoltage,
+    this.project = '',
   });
   @override
   State<SpecificationDialog> createState() => _SpecificationDialogState();
@@ -21,28 +23,40 @@ class _PointFields {
   String kind;
   bool? expectedState;
   bool get isBoolean => kind == 'digital_state';
+  bool get isNumber => kind == 'numeric';
+  bool get isText => kind == 'text';
   final TextEditingController label;
   final TextEditingController minimum;
   final TextEditingController maximum;
+  final TextEditingController unit;
+  final TextEditingController expectedText;
   _PointFields(Map<String, dynamic> point)
     : id = point['id'] as String,
       kind = point['value_kind'] == 'boolean'
           ? 'digital_state'
+          : point['value_kind'] == 'number' ? 'numeric'
+          : point['value_kind'] == 'text' ? 'text'
           : measurementPointKinds.containsKey(point['kind'])
           ? point['kind'] as String
           : 'custom',
       expectedState = point['expected_state'] as bool?,
       label = TextEditingController(text: point['label']?.toString() ?? ''),
       minimum = TextEditingController(
-        text: point['min_v'] is num ? formatNumber(point['min_v'] as num) : '',
+        text: (point['min_value'] ?? point['min_v']) is num
+          ? formatNumber((point['min_value'] ?? point['min_v']) as num) : '',
       ),
       maximum = TextEditingController(
-        text: point['max_v'] is num ? formatNumber(point['max_v'] as num) : '',
-      );
+        text: (point['max_value'] ?? point['max_v']) is num
+          ? formatNumber((point['max_value'] ?? point['max_v']) as num) : '',
+      ),
+      unit = TextEditingController(text: point['unit'] ?? ''),
+      expectedText = TextEditingController(text: point['expected_text'] ?? '');
   void dispose() {
     label.dispose();
     minimum.dispose();
     maximum.dispose();
+    unit.dispose();
+    expectedText.dispose();
   }
 }
 
@@ -107,16 +121,16 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         controller: minimum ? point.minimum : point.maximum,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
-          label: RequiredLabel(tr(minimum ? 'minV' : 'maxV')),
+          label: RequiredLabel(tr(point.isNumber
+            ? (minimum ? 'minimumValue' : 'maximumValue') : (minimum ? 'minV' : 'maxV'))),
         ),
         validator: (text) {
           if (unused(point)) return null;
           final value = voltage(text ?? '');
           if (value == null ||
               !value.isFinite ||
-              value < 0 ||
-              value > widget.supplyVoltage) {
-            return tr('testPointVoltageInvalid', {
+              (!point.isNumber && (value < 0 || value > widget.supplyVoltage))) {
+            return point.isNumber ? tr('validNumberRequired') : tr('testPointVoltageInvalid', {
               'max': AppStrings.of(context).number(widget.supplyVoltage),
             });
           }
@@ -227,6 +241,34 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 tr('booleanCriterionHelp'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+            ] else if (point.isText) ...[
+              label,
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: point.expectedText,
+                maxLength: 500,
+                decoration: InputDecoration(label: RequiredLabel(tr('expectedTextLabel')),
+                  helperText: tr('expectedTextHelp'), helperMaxLines: 3),
+                validator: (value) => (value ?? '').trim().isEmpty ? tr('fieldRequired') : null,
+              ),
+            ] else if (point.isNumber) ...[
+              label,
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: point.unit,
+                maxLength: 24,
+                decoration: InputDecoration(label: RequiredLabel(tr('sensorUnit')),
+                  hintText: '°C, %, Hz, cm, degrees'),
+                validator: (value) => (value ?? '').trim().isEmpty ||
+                  ['V', 'mV', 'boolean', 'text'].contains(value?.trim())
+                  ? tr('sensorUnitRequired') : null,
+              ),
+              const SizedBox(height: 12),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: voltageField(point, minimum: true)),
+                const SizedBox(width: 10),
+                Expanded(child: voltageField(point, minimum: false)),
+              ]),
             ] else if (contentWidth < 480) ...[
               label,
               const SizedBox(height: 10),
@@ -314,9 +356,15 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             'id': point.id,
             'kind': point.kind,
             'label': point.label.text.trim(),
-            'value_kind': point.isBoolean ? 'boolean' : 'voltage',
+            'value_kind': point.isBoolean ? 'boolean' : point.isText ? 'text' : point.isNumber ? 'number' : 'voltage',
             if (point.isBoolean) 'expected_state': point.expectedState,
-            if (!point.isBoolean) ...{
+            if (point.isText) 'expected_text': point.expectedText.text.trim(),
+            if (point.isNumber) ...{
+              'unit': point.unit.text.trim(),
+              'min_value': voltage(point.minimum.text),
+              'max_value': voltage(point.maximum.text),
+            },
+            if (!point.isBoolean && !point.isNumber && !point.isText) ...{
               'min_v': voltage(point.minimum.text),
               'max_v': voltage(point.maximum.text),
             },
@@ -340,6 +388,10 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const RequiredFieldsNotice(),
+              if (widget.project.trim().isNotEmpty) ...[
+                Text(widget.project.trim(), style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 12),
+              ],
               Text(tr('physicallyConfirmTheConnectionsDefineTheRangesThat')),
               example(),
               const SizedBox(height: 14),
