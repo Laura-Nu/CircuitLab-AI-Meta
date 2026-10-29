@@ -916,7 +916,7 @@ def request_hardware(
         raise HTTPException(409, "Ya existe un comando pendiente")
     command_id = uid()
     point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
-    if point.get("value_kind", "voltage") not in {"voltage", "boolean"}:
+    if point.get("value_kind", "voltage") not in {"voltage", "boolean"} or point.get("kind") == "reported_state":
         raise HTTPException(422, "Este dato requiere una lectura del sensor; el instrumento solo mide voltaje o estado digital")
     payload = s.HardwareCommand(
         command_id=command_id, session_id=session_id, device_id=device.id, point_id=body.point_id,

@@ -131,6 +131,44 @@ def test_digital_disconnect_completes_pending_command(client, headers, project, 
         assert db.get(BrowserUSBConnection, device) is None
 
 
+def test_program_status_cannot_be_acquired_as_an_electrical_pin(client, headers, project, database):
+    from app.schemas import DiagnosisOutput
+    from app.worker import validate_plan
+    sid = project["id"]
+    with database() as db:
+        row = db.get(Session, sid)
+        points = [dict(p) for p in row.specification["points"]]
+        points[1].update(kind="reported_state", label="GPS valid fix")
+        row.specification = {**row.specification, "points": points}
+        row.state, row.pending_test = "awaiting_measurement", {"point_id": "TP2"}
+        db.commit()
+        context = snapshot(db, row)
+        with pytest.raises(ValueError, match="not an ADC or GPIO read"):
+            validate_plan(DiagnosisOutput(
+                action="read_digital", point_id="TP2", observations=[], hypotheses=[],
+                instruction="Synthetic instrument request", rationale="Synthetic validation fixture",
+            ), context)
+    # The schema can represent false as a program state, but cannot label volts as one.
+    assert Point(id="TP2", label="GPS fix", kind="reported_state", value_kind="boolean",
+                 expected_state=False).expected_state is False
+    with pytest.raises(ValueError):
+        Point(id="TP2", label="Wrong type", kind="reported_state", min_v=0, max_v=3.3)
+    device = client.post(P + "/devices/enroll", headers=headers, json={
+        "name": "Isolated GPIO fixture", "transport": "browser_usb", "points": ["TP2"], "calibration_id": "fixture",
+    }).json()["device_id"]
+    client.post(f"{P}/devices/{device}/browser/connect", headers=headers)
+    rejected = client.post(f"{P}/sessions/{sid}/hardware", headers=headers, json={
+        "device_id": device, "point_id": "TP2", "conditions_confirmed": True,
+    })
+    assert rejected.status_code == 422, rejected.text
+    recorded = client.post(f"{P}/sessions/{sid}/measurements", headers=headers, json={
+        "client_id": "actual-program-status", "point_id": "TP2", "value": False, "unit": "boolean",
+        "conditions_confirmed": True, "measured_at": time.time(),
+    })
+    assert recorded.status_code == 201, recorded.text
+    assert recorded.json()["value"] is False and recorded.json()["source"] == "manual"
+
+
 def test_json_timestamp_threshold_matches_persisted_precision():
     from app.db import UTCInstant
     from sqlalchemy.dialects.sqlite import dialect

@@ -69,7 +69,7 @@ class SessionCreate(Strict):
 
 
 class Point(Strict):
-    kind: Literal["supply", "sensor_signal", "dc_output", "digital_state", "numeric", "text", "custom"] = "custom"
+    kind: Literal["supply", "sensor_signal", "dc_output", "digital_state", "reported_state", "numeric", "text", "custom"] = "custom"
     id: str = Field(pattern=r"^TP[1-9][0-9]?$", max_length=4)
     label: str = Field(min_length=1, max_length=120)
     value_kind: Literal["voltage", "boolean", "number", "text"] = "voltage"
@@ -106,7 +106,7 @@ class Point(Strict):
             raise ValueError("Voltage points require both voltage limits and no boolean state")
         elif self.min_v > self.max_v:
             raise ValueError("min_v debe ser menor o igual a max_v")
-        if self.kind == "digital_state" and self.value_kind != "boolean":
+        if self.kind in {"digital_state", "reported_state"} and self.value_kind != "boolean":
             raise ValueError("Digital state points require boolean observations")
         return self
 

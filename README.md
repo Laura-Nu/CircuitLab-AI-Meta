@@ -225,6 +225,14 @@ Numeric data use finite minimum/maximum criteria in their declared units. Text c
 exactly, including case. A successful whole-project functional observation is still
 required to finish. Existing voltage and boolean investigations remain compatible.
 
+New checks require an explicit observation type before showing criteria: voltage,
+number with a unit, program/sensor Yes/No, exact text/code, or electrical HIGH/LOW.
+The editor defines the expected criterion; the reading dialog records the actual
+observation separately and displays the frozen criterion for reference.
+Program/sensor booleans use `kind: reported_state`: card detection and GPS fix cannot
+be acquired as an instrument GPIO level. Electrical pin checks retain
+`kind: digital_state`. Existing voltage classifications and saved checks are preserved.
+
 A session supports several modules together and up to 32 separately checked observations,
 not a fixed catalog or a one-sensor-per-board restriction. One sensor can contribute
 multiple quantities. Guided operation checks allow enough analysis steps to request

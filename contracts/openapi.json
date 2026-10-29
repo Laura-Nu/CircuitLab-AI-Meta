@@ -2737,6 +2737,7 @@
               "sensor_signal",
               "dc_output",
               "digital_state",
+              "reported_state",
               "numeric",
               "text",
               "custom"

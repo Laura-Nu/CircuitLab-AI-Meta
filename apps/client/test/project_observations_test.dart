@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:circuitlab_client/core/networking/api.dart';
 import 'package:circuitlab_client/core/usb_serial.dart';
+import 'package:circuitlab_client/core/measurement_points.dart';
 import 'package:circuitlab_client/l10n/app_strings.dart';
 import 'package:circuitlab_client/features/specification_dialog.dart';
 import 'package:circuitlab_client/features/serial_monitor.dart';
@@ -30,6 +31,12 @@ void main() {
   setUpAll(() async {
     await (FontLoader('Roboto')
       ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf'))).load();
+  });
+  test('Program Yes/No stays separate from an instrument GPIO state', () {
+    expect(instrumentSupportsObservation({'value_kind': 'boolean', 'kind': 'reported_state'}), isFalse);
+    expect(instrumentSupportsObservation({'value_kind': 'boolean', 'kind': 'digital_state'}), isTrue);
+    expect(instrumentSupportsObservation({'value_kind': 'number', 'unit': '°C'}), isFalse);
+    expect(instrumentSupportsObservation({'min_v': 0, 'max_v': 5}), isTrue);
   });
   for (final language in ['es', 'en']) {
     test('Sensor values keep their own units and exact text in $language', () {
@@ -77,6 +84,60 @@ void main() {
     });
   }
   for (final language in ['es', 'en']) {
+    testWidgets('New check explicitly chooses its type without assuming volts in $language', (tester) async {
+      final strings = AppStrings(language);
+      Map<String, dynamic>? saved;
+      await tester.pumpWidget(shell(language, Builder(builder: (context) => TextButton(
+        onPressed: () async => saved = await showDialog<Map<String, dynamic>>(
+          context: context, builder: (_) => const SpecificationDialog(
+            supplyVoltage: 3.3,
+            specification: {'connections': ['Confirmed synthetic wiring'],
+              'functional_description': 'Observe the actual project condition'},
+          ),
+        ), child: const Text('Open'),
+      ))));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      final selector = find.byKey(const ValueKey('TP1-kind'));
+      expect(tester.widget<DropdownButtonFormField<String>>(selector).initialValue, isNull);
+      expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
+      await tester.enterText(find.byKey(const ValueKey('TP1-label')), 'GPS valid fix');
+      Future<void> choose(String message) async {
+        await tester.ensureVisible(selector);
+        await tester.tap(selector);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(strings.t(message)).last);
+        await tester.pumpAndSettle();
+      }
+      await choose('measurementKindNumber');
+      expect(find.byKey(const ValueKey('TP1-unit')), findsOneWidget);
+      expect(tester.widget<TextFormField>(find.byKey(const ValueKey('TP1-min'))).keyboardType?.signed, isTrue);
+      await choose('measurementKindText');
+      expect(find.byKey(const ValueKey('TP1-expected-text')), findsOneWidget);
+      expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
+      await choose('observationVoltageType');
+      expect(find.byKey(const ValueKey('TP1-min')), findsOneWidget);
+      expect(find.byKey(const ValueKey('TP1-unit')), findsNothing);
+      await choose('measurementKindReportedState');
+      expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
+      final state = find.byKey(const ValueKey('TP1-expected-state'));
+      await tester.ensureVisible(state);
+      await tester.tap(state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(strings.t('observationNo')).last);
+      await tester.pumpAndSettle();
+      final submit = find.text(strings.t('iConfirmTheSchematicAndCriteria'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      final point = (saved!['points'] as List).single as Map;
+      expect(point['kind'], 'reported_state');
+      expect(point['value_kind'], 'boolean');
+      expect(point['expected_state'], false);
+      expect(point.containsKey('min_v'), isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
     for (final layout in [
       (width: 320.0, height: 900.0, scale: 2.0, keyboard: 260.0),
       (width: 568.0, height: 320.0, scale: 1.5, keyboard: 100.0),

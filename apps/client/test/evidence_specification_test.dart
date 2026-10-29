@@ -81,6 +81,12 @@ void main() {
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
         Future<void> fill(String id) async {
+          final type = find.byKey(ValueKey('$id-kind'));
+          await tester.ensureVisible(type);
+          await tester.tap(type);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(strings.t('observationVoltageType')).last);
+          await tester.pumpAndSettle();
           for (final entry in {
             'label': 'Node $id',
             'min': '0',

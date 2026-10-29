@@ -114,7 +114,7 @@ def validate_plan(output, context):
         raise ValueError("Una medición requiere un punto autorizado")
     if output.action in {"read_voltage", "read_digital"} and output.point_id is not None:
         point = next(p for p in context["specification"]["points"] if p["id"] == output.point_id)
-        if point.get("value_kind", "voltage") not in {"voltage", "boolean"}:
+        if point.get("value_kind", "voltage") not in {"voltage", "boolean"} or point.get("kind") == "reported_state":
             raise ValueError("Sensor quantities require request_manual_measurement, not an ADC or GPIO read")
         if point_is_boolean(point) != (output.action == "read_digital"):
             raise ValueError("The requested procedure does not match the authorized observation type")

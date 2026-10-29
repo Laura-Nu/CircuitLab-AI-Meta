@@ -21,8 +21,9 @@ class SpecificationDialog extends StatefulWidget {
 class _PointFields {
   final String id;
   String kind;
+  bool typeSelected;
   bool? expectedState;
-  bool get isBoolean => kind == 'digital_state';
+  bool get isBoolean => kind == 'digital_state' || kind == 'reported_state';
   bool get isNumber => kind == 'numeric';
   bool get isText => kind == 'text';
   final TextEditingController label;
@@ -33,12 +34,13 @@ class _PointFields {
   _PointFields(Map<String, dynamic> point)
     : id = point['id'] as String,
       kind = point['value_kind'] == 'boolean'
-          ? 'digital_state'
+          ? point['kind'] == 'reported_state' ? 'reported_state' : 'digital_state'
           : point['value_kind'] == 'number' ? 'numeric'
           : point['value_kind'] == 'text' ? 'text'
           : measurementPointKinds.containsKey(point['kind'])
           ? point['kind'] as String
           : 'custom',
+      typeSelected = point['value_kind'] != null || point['min_v'] != null || point['max_v'] != null,
       expectedState = point['expected_state'] as bool?,
       label = TextEditingController(text: point['label']?.toString() ?? ''),
       minimum = TextEditingController(
@@ -97,7 +99,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
   double? voltage(String text) =>
       double.tryParse(text.trim().replaceAll(',', '.'));
   bool unused(_PointFields point) =>
-      point.kind == 'custom' &&
+      !point.typeSelected &&
       point.label.text.trim().isEmpty &&
       point.minimum.text.trim().isEmpty &&
       point.maximum.text.trim().isEmpty;
@@ -118,7 +120,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
       TextFormField(
         key: ValueKey(point.id + (minimum ? '-min' : '-max')),
         controller: minimum ? point.minimum : point.maximum,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        keyboardType: TextInputType.numberWithOptions(decimal: true, signed: point.isNumber),
         decoration: InputDecoration(
           label: RequiredLabel(tr(point.isNumber
             ? (minimum ? 'minimumValue' : 'maximumValue') : (minimum ? 'minV' : 'maxV'))),
@@ -214,21 +216,35 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             DropdownButtonFormField<String>(
               itemHeight: null,
               key: ValueKey('${point.id}-kind'),
-              initialValue: point.kind,
+              initialValue: !point.typeSelected ? null :
+                ['supply', 'sensor_signal', 'dc_output'].contains(point.kind) ? 'custom' : point.kind,
               isExpanded: true,
               isDense: false,
               decoration: InputDecoration(
                 label: RequiredLabel(tr('measurementConnectionType')),
               ),
               items: [
-                for (final kind in measurementPointKinds.entries)
+                for (final kind in ['custom', 'numeric', 'reported_state', 'text', 'digital_state'])
                   DropdownMenuItem(
-                    value: kind.key,
-                    child: Text(tr(kind.value), maxLines: 2),
+                    value: kind,
+                    child: Text(tr(kind == 'custom' ? 'observationVoltageType' : measurementPointKinds[kind]!), maxLines: 3),
                   ),
               ],
-              onChanged: (value) => setState(() => point.kind = value!),
+              validator: (value) => !unused(point) && value == null ? tr('observationChooseType') : null,
+              onChanged: (value) => setState(() {
+                if (value != 'custom' || !['supply', 'sensor_signal', 'dc_output'].contains(point.kind)) {
+                  point.kind = value!;
+                }
+                point.typeSelected = true;
+              }),
             ),
+            const SizedBox(height: 8),
+            Text(tr(!point.typeSelected ? 'observationChooseType' :
+              point.kind == 'reported_state' ? 'observationReportedHelp' :
+              point.kind == 'digital_state' ? 'observationPinHelp' :
+              point.isNumber ? 'observationNumberHelp' :
+              point.isText ? 'observationTextHelp' : 'observationVoltageHelp'),
+              style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             if (point.isBoolean) ...[
               label,
@@ -245,11 +261,11 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 items: [
                   DropdownMenuItem(
                     value: true,
-                    child: Text(tr('booleanTrue'), maxLines: 2),
+                    child: Text(tr(point.kind == 'reported_state' ? 'observationYes' : 'booleanTrue'), maxLines: 2),
                   ),
                   DropdownMenuItem(
                     value: false,
-                    child: Text(tr('booleanFalse'), maxLines: 2),
+                    child: Text(tr(point.kind == 'reported_state' ? 'observationNo' : 'booleanFalse'), maxLines: 2),
                   ),
                 ],
                 onChanged: (value) =>
@@ -288,11 +304,11 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               ),
               const SizedBox(height: 12),
               rangeFields(point),
-            ] else ...[
+            ] else if (point.typeSelected) ...[
               label,
               const SizedBox(height: 10),
               rangeFields(point),
-            ],
+            ] else label,
           ],
         );
       },

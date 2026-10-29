@@ -18,6 +18,7 @@ Map<String, dynamic> fixtureSpec() => {
     {
       'id': 'TP7',
       'label': 'Declared sensor terminal',
+      'kind': 'sensor_signal',
       'min_v': .2,
       'max_v': 2.8,
     },
@@ -106,7 +107,7 @@ void main() {
           await tester.ensureVisible(selector);
           await tester.tap(selector);
           await tester.pumpAndSettle();
-          await tester.tap(find.text(strings.t('measurementKindSensor')).last);
+          await tester.tap(find.text(strings.t('observationVoltageType')).last);
           await tester.pumpAndSettle();
           for (final entry in {
             'label': 'Declared sensor terminal',
@@ -153,7 +154,7 @@ void main() {
                   find.byKey(const ValueKey('TP7-kind')),
                 )
                 .initialValue,
-            'sensor_signal',
+            'custom',
           );
           await tester.pumpWidget(const SizedBox());
         },

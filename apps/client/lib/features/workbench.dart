@@ -1989,6 +1989,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
               isExpanded: true,
               initialValue: point,
               isDense: false,
+              itemHeight: null,
               decoration: InputDecoration(
                 label: RequiredLabel(tr('testPointRelativeToGnd')),
               ),
@@ -2010,6 +2011,12 @@ class _WorkbenchState extends ConsumerState<Workbench>
                       observedState = null;
                     }),
             ),
+            const SizedBox(height: 12),
+            Text(tr('observationExpectedCriterion', {
+              'criterion': AppStrings.of(context).criterion(criterion()),
+            })),
+            const SizedBox(height: 8),
+            Text(tr('observationActualHelp')),
             SizedBox(height: 16),
             if (digital())
               DropdownButtonFormField<bool>(
@@ -2023,11 +2030,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 items: [
                   DropdownMenuItem(
                     value: true,
-                    child: Text(tr('booleanTrue'), maxLines: 2),
+                    child: Text(tr(criterion()['kind'] == 'reported_state' ? 'observationYes' : 'booleanTrue'), maxLines: 2),
                   ),
                   DropdownMenuItem(
                     value: false,
-                    child: Text(tr('booleanFalse'), maxLines: 2),
+                    child: Text(tr(criterion()['kind'] == 'reported_state' ? 'observationNo' : 'booleanFalse'), maxLines: 2),
                   ),
                 ],
                 validator: (v) => v == null ? tr('fieldRequired') : null,
@@ -2249,7 +2256,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final s = selected!;
     final points = (s['specification']['points'] as List)
         .where(
-          (p) => ['voltage', 'boolean'].contains(p['value_kind'] ?? 'voltage') &&
+          (p) => instrumentSupportsObservation(p as Map) &&
             devices.any((d) => (d['points'] as List).contains(p['id'])),
         )
         .toList();
@@ -2594,7 +2601,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
     maxLines: lines,
     maxLength: maxLength,
     keyboardType: numeric
-        ? TextInputType.numberWithOptions(decimal: true)
+        ? TextInputType.numberWithOptions(decimal: true, signed: !voltageOnly)
         : null,
     decoration: InputDecoration(
       label: required ? RequiredLabel(label) : Text(label),

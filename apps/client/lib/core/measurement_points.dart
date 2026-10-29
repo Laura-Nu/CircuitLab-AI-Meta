@@ -5,6 +5,7 @@ const measurementPointKinds = <String, String>{
   'sensor_signal': 'measurementKindSensor',
   'dc_output': 'measurementKindDcOutput',
   'digital_state': 'measurementKindDigital',
+  'reported_state': 'measurementKindReportedState',
   'numeric': 'measurementKindNumber',
   'text': 'measurementKindText',
   'custom': 'measurementKindCustom',
@@ -45,3 +46,7 @@ Map measurementPoint(Map specification, dynamic pointId) =>
 
 bool booleanPoint(Map specification, dynamic pointId) =>
     measurementPoint(specification, pointId)['value_kind'] == 'boolean';
+
+bool instrumentSupportsObservation(Map point) =>
+    point['kind'] != 'reported_state' &&
+    const ['voltage', 'boolean'].contains(point['value_kind'] ?? 'voltage');
