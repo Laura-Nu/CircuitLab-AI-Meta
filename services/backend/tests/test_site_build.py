@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import hashlib
+import json
 import zipfile
 import pytest
 
@@ -46,6 +47,14 @@ def test_packaging_keeps_app_assets_under_their_base_path(tmp_path, monkeypatch)
     stale = fixture / "apps/client/build/app/outputs/flutter-apk/app-release.apk"
     stale.parent.mkdir(parents=True)
     stale.write_bytes(b"stale local build must not be published")
+    bridge = fixture / "releases/bridge/circuitlab-bridge-windows.exe"
+    bridge.parent.mkdir(parents=True)
+    bridge.write_bytes(b"MZ synthetic package fixture, not executable")
+    bridge_sha = hashlib.sha256(bridge.read_bytes()).hexdigest()
+    bridge_metadata = {"filename": bridge.name, "platform": "windows-x64",
+                       "size": bridge.stat().st_size, "sha256": bridge_sha}
+    (bridge.parent / "manifest.json").write_text(json.dumps(bridge_metadata), encoding="utf-8")
+    (bridge.parent / "credentials.json").write_text("PRIVATE CONFIG MUST NEVER BE COPIED", encoding="utf-8")
     monkeypatch.setattr(site, "ROOT", fixture)
     output = site.build(tmp_path / "website")
     assert "CircuitLab AI" in (output / "index.html").read_text(encoding="utf-8")
@@ -56,6 +65,14 @@ def test_packaging_keeps_app_assets_under_their_base_path(tmp_path, monkeypatch)
     checksum = hashlib.sha256(release.read_bytes()).hexdigest()
     assert (output / "downloads/circuitlab-ai.apk.sha256").read_text().startswith(checksum)
 
+    assert (output / "downloads" / bridge.name).read_bytes() == bridge.read_bytes()
+    assert (output / "downloads/circuitlab-bridge-windows.exe.sha256").read_text() == (
+        bridge_sha + "  " + bridge.name + "\n")
+    assert not list(output.rglob("credentials.json"))
+    bridge_metadata["sha256"] = "invalid"
+    (bridge.parent / "manifest.json").write_text(json.dumps(bridge_metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="Bridge release metadata"):
+        site.build(tmp_path / "corrupt-release")
     (flutter / "index.html").write_text('<base href="/">', encoding="utf-8")
     with pytest.raises(ValueError, match="--base-href /app/"):
         site.build(tmp_path / "wrong-base")

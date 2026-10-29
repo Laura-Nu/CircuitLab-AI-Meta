@@ -1,7 +1,7 @@
 name: circuitlab_client
 description: Evidence-based electronic circuit diagnosis assistant.
 publish_to: none
-version: 0.1.8+9
+version: 0.1.10+11
 environment:
   sdk: ^3.9.2
 dependencies:

@@ -12,12 +12,14 @@ import '../core/networking/api.dart';
 import '../main.dart';
 import '../l10n/app_strings.dart';
 import '../core/form_fields.dart';
+import '../core/measurement_points.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
 import 'investigation.dart';
 import 'metrics.dart';
 import 'functional_check.dart';
 import 'specification_dialog.dart';
+import 'bridge_setup.dart';
 import 'session_guidance.dart';
 import '../core/brand.dart';
 import '../core/password_visibility.dart';
@@ -1410,9 +1412,12 @@ class _WorkbenchState extends ConsumerState<Workbench>
                 Padding(
                   padding: EdgeInsets.only(bottom: 8),
                   child: Text(
-                    tr('pointCriterion', {
-                      'point': p['id'],
-                      'label': p['label'],
+                    tr('namedPointCriterion', {
+                      'name': measurementPointName(
+                        s['specification'],
+                        p['id'],
+                        includeReference: api.isAdmin,
+                      ),
                       'min': p['min_v'],
                       'max': p['max_v'],
                     }),
@@ -1432,7 +1437,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
                     runSpacing: 6,
                     children: [
                       Text(
-                        m['point_id'],
+                        measurementPointName(
+                          s['specification'],
+                          m['point_id'],
+                          includeReference: api.isAdmin,
+                        ),
                         style: TextStyle(
                           color: mint,
                           fontWeight: FontWeight.w600,
@@ -1596,6 +1605,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
         tr('theBridgeOpensAnOutboundConnectionItOnly'),
         style: TextStyle(color: muted),
       ),
+      SizedBox(height: 24),
+      BridgeSetupCard(onDownload: downloadBridge),
       SizedBox(height: 24),
       FilledButton.icon(
         onPressed: busy ? null : enroll,
@@ -1822,12 +1833,19 @@ class _WorkbenchState extends ConsumerState<Workbench>
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: point,
+              isDense: false,
               decoration: InputDecoration(
                 label: RequiredLabel(tr('testPointRelativeToGnd')),
               ),
               items: [
                 for (final p in points)
-                  DropdownMenuItem(value: p, child: Text(p)),
+                  DropdownMenuItem(
+                    value: p,
+                    child: Text(
+                      measurementPointName(s['specification'], p),
+                      maxLines: 2,
+                    ),
+                  ),
               ],
               onChanged: s['state'] == 'awaiting_measurement'
                   ? null
@@ -2079,12 +2097,16 @@ class _WorkbenchState extends ConsumerState<Workbench>
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: point,
+              isDense: false,
               decoration: InputDecoration(label: RequiredLabel(tr('point'))),
               items: [
                 for (final p in points)
                   DropdownMenuItem(
                     value: p['id'] as String,
-                    child: Text(p['id']),
+                    child: Text(
+                      measurementPointName(s['specification'], p['id']),
+                      maxLines: 2,
+                    ),
                   ),
               ],
               onChanged: s['state'] == 'awaiting_measurement'
@@ -2160,6 +2182,13 @@ class _WorkbenchState extends ConsumerState<Workbench>
     code.dispose();
   }
 
+  Future<void> downloadBridge() async {
+    final opened = await openPublicUrl(
+      landingUri(api.language).resolve(bridgeDownloadPath),
+    );
+    if (!opened && mounted) toast(tr('bridgeDownloadFailed'));
+  }
+
   Future<void> enroll() async {
     final name = TextEditingController();
     final calibration = TextEditingController();
@@ -2170,6 +2199,13 @@ class _WorkbenchState extends ConsumerState<Workbench>
         builder: (_, update) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Text(tr('bridgeEnrollmentHint')),
+            TextButton.icon(
+              onPressed: downloadBridge,
+              icon: const Icon(Icons.download_outlined),
+              label: Text(tr('downloadWindowsBridge')),
+            ),
+            const SizedBox(height: 12),
             field(name, tr('deviceName'), minLength: 2),
             SizedBox(height: 16),
             field(calibration, tr('calibrationIdentifier'), minLength: 3),
@@ -2203,6 +2239,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
           tr('bridgeCredential'),
           JsonEncoder.withIndent('  ').convert({
             ...result,
+            'url': bridgeSocketUri(
+              landingUri(api.language).resolve(api.dio.options.baseUrl),
+            ).toString(),
+            'language': api.language,
             'calibration_id': calibration.text,
             'points': ['TP1', 'TP2', 'TP3'],
             'simulate': simulated,

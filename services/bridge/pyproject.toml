@@ -6,6 +6,7 @@ dependencies = ["pyserial==3.5", "websockets==15.0.1"]
 
 [dependency-groups]
 dev = ["pytest==8.3.5"]
+bundle = ["pyinstaller==6.22.3"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

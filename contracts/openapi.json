@@ -2272,6 +2272,17 @@
       },
       "Point": {
         "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "supply",
+              "sensor_signal",
+              "dc_output",
+              "custom"
+            ],
+            "title": "Kind",
+            "default": "custom"
+          },
           "id": {
             "type": "string",
             "maxLength": 4,

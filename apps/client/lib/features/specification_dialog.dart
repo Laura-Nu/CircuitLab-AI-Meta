@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../core/form_fields.dart';
+import '../core/measurement_points.dart';
 
 class SpecificationDialog extends StatefulWidget {
   final Map<String, dynamic> specification;
@@ -16,11 +17,15 @@ class SpecificationDialog extends StatefulWidget {
 
 class _PointFields {
   final String id;
+  String kind;
   final TextEditingController label;
   final TextEditingController minimum;
   final TextEditingController maximum;
   _PointFields(Map<String, dynamic> point)
     : id = point['id'] as String,
+      kind = measurementPointKinds.containsKey(point['kind'])
+          ? point['kind'] as String
+          : 'custom',
       label = TextEditingController(text: point['label']?.toString() ?? ''),
       minimum = TextEditingController(text: point['min_v']?.toString() ?? ''),
       maximum = TextEditingController(text: point['max_v']?.toString() ?? '');
@@ -69,6 +74,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
   double? voltage(String text) =>
       double.tryParse(text.trim().replaceAll(',', '.'));
   bool unused(_PointFields point) =>
+      point.kind == 'custom' &&
       point.label.text.trim().isEmpty &&
       point.minimum.text.trim().isEmpty &&
       point.maximum.text.trim().isEmpty;
@@ -128,7 +134,8 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
           controller: point.label,
           maxLength: 120,
           decoration: InputDecoration(
-            label: RequiredLabel(tr('label')),
+            label: RequiredLabel(tr('measurementLocation')),
+            hintText: tr('measurementLocationHint'),
             counterText: '',
           ),
           validator: (value) => !unused(point) && (value ?? '').trim().isEmpty
@@ -145,16 +152,40 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 }),
           icon: const Icon(Icons.remove_circle_outline),
         );
-        if (contentWidth < 480) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(point.id)),
-                  remove,
-                ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    tr('measurementPointNumber', {
+                      'number': point.id.substring(2),
+                    }),
+                  ),
+                ),
+                remove,
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey('${point.id}-kind'),
+              initialValue: point.kind,
+              isExpanded: true,
+              isDense: false,
+              decoration: InputDecoration(
+                label: RequiredLabel(tr('measurementConnectionType')),
               ),
+              items: [
+                for (final kind in measurementPointKinds.entries)
+                  DropdownMenuItem(
+                    value: kind.key,
+                    child: Text(tr(kind.value), maxLines: 2),
+                  ),
+              ],
+              onChanged: (value) => setState(() => point.kind = value!),
+            ),
+            const SizedBox(height: 12),
+            if (contentWidth < 480) ...[
               label,
               const SizedBox(height: 10),
               Row(
@@ -165,23 +196,17 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                   Expanded(child: voltageField(point, minimum: false)),
                 ],
               ),
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 17),
-              child: Text(point.id),
-            ),
-            const SizedBox(width: 10),
-            Expanded(flex: 2, child: label),
-            const SizedBox(width: 8),
-            Expanded(child: voltageField(point, minimum: true)),
-            const SizedBox(width: 8),
-            Expanded(child: voltageField(point, minimum: false)),
-            remove,
+            ] else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 2, child: label),
+                  const SizedBox(width: 8),
+                  Expanded(child: voltageField(point, minimum: true)),
+                  const SizedBox(width: 8),
+                  Expanded(child: voltageField(point, minimum: false)),
+                ],
+              ),
           ],
         );
       },
@@ -206,6 +231,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         for (final point in defined)
           {
             'id': point.id,
+            'kind': point.kind,
             'label': point.label.text.trim(),
             'min_v': voltage(point.minimum.text),
             'max_v': voltage(point.maximum.text),
@@ -261,6 +287,8 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                     : null,
               ),
               const SizedBox(height: 18),
+              Text(tr('measurementPointHelp')),
+              const SizedBox(height: 12),
               Text(tr('testPointRequiredNotice')),
               const SizedBox(height: 12),
               for (final point in points) pointFields(point),

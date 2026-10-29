@@ -100,3 +100,52 @@ def test_registration_rate_limit(client):
         assert client.post(P + "/auth/register", json={"email": f"member{number}@example.test", "password": PASSWORD}).status_code == 201
     response = client.post(P + "/auth/register", json={"email": "overflow@example.test", "password": PASSWORD}, headers={"Accept-Language": "en"})
     assert response.status_code == 429 and response.json()["code"] == "registration_rate_limited"
+
+@pytest.mark.parametrize("second_client", ["native", "web"])
+def test_logout_revokes_only_its_session_even_after_refresh(client, database, second_client):
+    origin = {"Origin": settings().app_origin}
+    body = {"email": "owner@example.test", "password": "test-password-123"}
+    first = client.post(P + "/auth/login", json=body).json()
+    second = client.post(P + "/auth/login", headers=origin,
+                         json={**body, "client": second_client}).json()
+    first_auth = {"Authorization": "Bearer " + first["access_token"]}
+    second_auth = {"Authorization": "Bearer " + second["access_token"]}
+    assert client.get(P + "/auth/me", headers=first_auth).status_code == 200
+    refresh_body = {} if second_client == "web" else {"refresh_token": second["refresh_token"]}
+    renewed = client.post(P + "/auth/refresh", headers=origin, json=refresh_body)
+    assert renewed.status_code == 200
+    second_refreshed = renewed.json()
+    revoked_refresh = client.cookies.get(COOKIE) if second_client == "web" else second_refreshed["refresh_token"]
+    with database() as db:
+        second_session_id = db.get(Token, digest(second["access_token"])).auth_session_id
+        first_session_id = db.get(Token, digest(first["access_token"])).auth_session_id
+    assert first_session_id != second_session_id
+    assert client.post(P + "/auth/logout", headers=second_auth).status_code == 204
+    # Previously 401: logout in one client closed every login for this account.
+    assert client.get(P + "/auth/me", headers=first_auth).status_code == 200
+    first_renewed = client.post(P + "/auth/refresh", json={"refresh_token": first["refresh_token"]})
+    assert first_renewed.status_code == 200
+    assert first_renewed.json()["idle_expires_at"] == pytest.approx(first["idle_expires_at"], rel=0, abs=.001)
+    for access in (second["access_token"], second_refreshed["access_token"]):
+        assert client.get(P + "/auth/me", headers={"Authorization": "Bearer " + access}).status_code == 401
+    assert client.post(P + "/auth/refresh", json={"refresh_token": revoked_refresh}).status_code == 401
+    with database() as db:
+        assert db.get(AuthSession, first_session_id) is not None
+        assert db.get(AuthSession, second_session_id) is None
+        assert not list(db.scalars(select(Token).where(Token.auth_session_id == second_session_id)))
+
+
+def test_logout_from_an_older_tab_preserves_the_newer_login_cookie(client):
+    origin = {"Origin": settings().app_origin}
+    body = {"email": "owner@example.test", "password": "test-password-123", "client": "web"}
+    first = client.post(P + "/auth/login", headers=origin, json=body).json()
+    first_cookie = client.cookies.get(COOKIE)
+    newer = client.post(P + "/auth/login", headers=origin, json=body).json()
+    newer_cookie = client.cookies.get(COOKIE)
+    first_auth = {"Authorization": "Bearer " + first["access_token"]}
+    newer_auth = {"Authorization": "Bearer " + newer["access_token"]}
+    assert client.post(P + "/auth/logout", headers=first_auth).status_code == 204
+    assert client.cookies.get(COOKIE) == newer_cookie
+    assert client.get(P + "/auth/me", headers=newer_auth).status_code == 200
+    assert client.post(P + "/auth/refresh", headers=origin, json={}).status_code == 200
+    assert client.post(P + "/auth/refresh", json={"refresh_token": first_cookie}).status_code == 401

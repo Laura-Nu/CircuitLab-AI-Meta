@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import 'analysis_status.dart';
+import '../core/measurement_points.dart';
 
 const finishedStates = {
   'resolved',
@@ -315,7 +316,12 @@ class SessionGuidance extends StatelessWidget {
           if (state == 'awaiting_measurement' && plan['point_id'] != null) ...[
             const SizedBox(height: 12),
             Text(
-              strings.t('requestedPointGuide', {'point': plan['point_id']}),
+              strings.t('requestedPointGuide', {
+                'point': measurementPointName(
+                  session['specification'] as Map? ?? {},
+                  plan['point_id'],
+                ),
+              }),
               style: TextStyle(color: tone, fontWeight: FontWeight.w600),
             ),
           ],
@@ -351,7 +357,7 @@ class SessionGuidance extends StatelessWidget {
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        '${check['point_id']} · ${check['label'] ?? ''} — ${check['value'] == null ? tr('readingStillNeeded') : '${(check['value'] as num).toStringAsFixed(3)} V'}',
+                        '${measurementPointName(session['specification'] as Map? ?? {}, check['point_id'])} — ${check['value'] == null ? tr('readingStillNeeded') : '${(check['value'] as num).toStringAsFixed(3)} V'}',
                       ),
                     ),
                   ],

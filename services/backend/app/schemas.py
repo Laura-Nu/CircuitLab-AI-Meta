@@ -68,6 +68,7 @@ class SessionCreate(Strict):
 
 
 class Point(Strict):
+    kind: Literal["supply", "sensor_signal", "dc_output", "custom"] = "custom"
     id: str = Field(pattern=r"^TP[1-9][0-9]?$", max_length=4)
     label: str = Field(min_length=1, max_length=120)
     min_v: float = Field(ge=0, le=5)

@@ -226,12 +226,26 @@ def activity(request: Request, response: Response, user=Depends(current_user), d
 
 
 @app.post(prefix + "/auth/logout", status_code=204)
-def logout(user=Depends(current_user), db: DBSession = Depends(get_db)):
-    for token in db.scalars(select(Token).where(Token.user_id == user.id)):
-        db.delete(token)
+def logout(request: Request, user=Depends(current_user), db: DBSession = Depends(get_db)):
+    raw_access = request.headers.get("authorization", "").split(" ", 1)[-1]
+    token = db.get(Token, digest(raw_access))
+    session_id = token.auth_session_id if token else None
+    raw_cookie = request.cookies.get(COOKIE)
+    cookie_token = db.get(Token, digest(raw_cookie)) if raw_cookie else None
+    clear_cookie = not cookie_token or cookie_token.auth_session_id == session_id
+    # Use the same session lock as refresh so a concurrent refresh cannot restore
+    # credentials after this logout. Other browser/device sessions remain valid.
+    session = db.scalar(select(AuthSession).where(
+        AuthSession.id == session_id, AuthSession.user_id == user.id,
+    ).with_for_update()) if session_id else None
+    if session:
+        db.execute(delete(Token).where(Token.auth_session_id == session.id, Token.user_id == user.id))
+        db.delete(session)
     db.commit()
     response = Response(status_code=204)
-    response.delete_cookie(COOKIE, path=COOKIE_PATH)
+    # A newer tab may have replaced the browser cookie with a different login.
+    if clear_cookie:
+        response.delete_cookie(COOKIE, path=COOKIE_PATH)
     return response
 
 

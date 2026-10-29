@@ -242,6 +242,51 @@ $env:BRIDGE_CONFIG = 'credentials.json'
 uv run python -m bridge.main
 ```
 
+### Windows desktop companion
+
+Under **Devices**, users can download **CircuitLab Bridge for Windows 10/11 x64**.
+Download it once, then open it whenever USB readings are needed. Python and a source
+checkout are not required. Register a bridge, copy the complete one-time credential
+block, use **Paste CircuitLab credential** in the desktop application, choose the
+detected USB port, and click **Connect**. The copied block includes the API's actual
+WebSocket address. Keep the desktop application open while requesting readings.
+
+Settings are protected using Windows DPAPI for the current Windows user under
+`%LOCALAPPDATA%/CircuitLab/Bridge`; they are not embedded in the public executable.
+The executable starts disconnected on subsequent launches. Its per-device SQLite
+journal preserves command deduplication. A second copy is prevented in the same
+Windows session. Rejected credentials stop reconnection and require correction.
+
+The connected badge confirms desktop-to-server communication. It does not prove
+USB acquisition or instrument calibration. A compatible instrument and firmware
+are still required; this application does not upload firmware or replace the
+program of a board being diagnosed. From an existing or new session, use **Read
+with bridge** when the workflow requests a measurement and choose that instrument.
+The selection is per measurement; the command/result is recorded in that session.
+Phones can use the web/Android session while the bridge runs on the USB-connected
+Windows computer. macOS/Linux binaries are not included in this release; the Python
+bridge remains available for development.
+
+To reproduce the Windows executable on Windows x64:
+
+```powershell
+uv sync --project services/bridge --frozen --group bundle
+uv run --project services/bridge --group bundle python scripts/build_bridge_windows.py
+```
+
+The build uses [PyInstaller](https://www.pyinstaller.org/en/stable/usage.html) in
+one-file windowed mode with the existing CircuitLab icon. It explicitly includes
+the desktop entry point and icon, runs a dependency/UI smoke check, and publishes
+only the executable, SHA-256 checksum and public release manifest under
+`releases/bridge`. The executable is currently unsigned; it has no Authenticode
+publisher certificate. It never contains enrolled device credentials or Meta keys.
+
+`python scripts/build_site.py` verifies the release manifest and publishes the
+binary at `/downloads/circuitlab-bridge-windows.exe`. An existing VPS receives it
+through the normal `git pull` and site packaging steps; it does not build Windows
+executables on Linux. Web and Android version 0.1.10/build 11 include the download
+instructions and registration guidance.
+
 The bridge initiates the outbound connection and requires WSS outside localhost.
 Its example configuration uses simulation. Real readings require calibrated hardware
 and `simulate: false`. Timeouts, saturation and disconnected instruments produce
@@ -439,6 +484,11 @@ cookie (Secure in production); the access credential stays in memory. Android
 stores its refresh credential in platform secure storage. Reloading the web app
 restores an unexpired session without placing credentials in localStorage.
 
+Signing out revokes only the current login's access/refresh credentials. Other
+browser/device logins for the same account keep their own inactivity deadlines.
+A logout from an older tab does not delete a newer login's browser cookie.
+Password resets and account role/status changes still revoke sessions globally.
+
 `SESSION_IDLE_MINUTES=240` is the default minimum idle window. Human pointer,
 scroll and keyboard input triggers a throttled activity heartbeat. The backend
 extends only that login session. Automatic polling, token refresh and restoration
@@ -629,6 +679,30 @@ input/output before excluding supply variation. This guidance and software tests
 do not establish physical accuracy or guarantee every model response is correct.
 Existing model responses remain in the audit trail; the updated rules apply to
 subsequent analyses.
+
+### Named measurement locations
+
+The criteria editor asks what will be measured: board/circuit supply, an analog
+sensor signal, a DC voltage output, or another pin/connection. Each used location
+requires its exact name and explicit minimum/maximum DC voltages. External resistors
+are not required to define a measurement location. Selecting a type never assigns
+a voltage, a board pinout or an instrument channel.
+
+Member measurement pickers, recorded readings and the requested-check guide show
+the confirmed connection names. Stable TP identifiers remain the backend/bridge
+references. Duplicate names include their references so the user can distinguish
+them. Existing criteria default to the custom type and keep their IDs, names and
+ranges. Criteria remain fixed after analysis starts.
+
+The optional point kind is stored inside the existing specification JSON; no
+database migration is needed for this addition. Deploy the updated backend before
+using the new client payload. Web and downloadable Android release 0.1.10/build 11
+include the new editor.
+
+This remains the supported 0-5 V DC measurement workflow. A connection-type selector
+does not add serial telemetry, PWM/waveform analysis, sketch execution/debugging or
+a universal Arduino/ESP32 pinout. Board-specific pin choices require the exact
+board model and a confirmed physical connection.
 
 ### Session purpose and required inputs
 
