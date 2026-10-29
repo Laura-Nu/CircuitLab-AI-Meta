@@ -6,6 +6,7 @@ import re
 import subprocess
 import tempfile
 from release_bundle import digest
+from deploy_vps import BACKEND_STAGES
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -94,6 +95,12 @@ def deployment_failure(result):
         )):
             return ("ssh_connection", "SSH could not reach the VPS; check SSH_HOST, SSH_PORT and access from GitHub Actions")
         return ("ssh_transport", "The SSH connection failed; check the VPS SSH service and its authentication logs")
+    for line in stderr.splitlines():
+        prefix = "CircuitLab backend stage failed: "
+        if line.startswith(prefix):
+            stage = line[len(prefix):].strip()
+            if stage in BACKEND_STAGES:
+                return ("backend_" + stage, BACKEND_STAGES[stage])
     for line in stderr.splitlines():
         prefix = "CircuitLab deployment failed: "
         if line.startswith(prefix):

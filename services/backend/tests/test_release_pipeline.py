@@ -191,3 +191,25 @@ def test_failed_shipping_cleans_key_and_reports_safe_reason_only(tmp_path, monke
     assert "UNIT-PRIVATE-KEY" not in str(failure.value) and "UNIT-OTHER-SECRET" not in str(failure.value)
     assert not paths[0].exists()
     assert "UNIT-" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("stage", list(ci_ship.BACKEND_STAGES))
+def test_backend_failure_stage_survives_the_legacy_gateway_without_exposing_output(stage, capsys):
+    import deploy_vps
+    with pytest.raises(deploy_vps.DeploymentError):
+        with deploy_vps.backend_stage(stage):
+            raise deploy_vps.DeploymentError("UNIT-PRIVATE-PROCESS-OUTPUT")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "UNIT-PRIVATE-PROCESS-OUTPUT" not in captured.err
+    result = SimpleNamespace(returncode=1, stderr=(
+        captured.err + "CircuitLab deployment failed: DeploymentError\\nUNIT-PRIVATE-PROCESS-OUTPUT").encode())
+    code, message = ci_ship.deployment_failure(result)
+    assert code == "backend_" + stage and message == ci_ship.BACKEND_STAGES[stage]
+    assert "UNIT-PRIVATE-PROCESS-OUTPUT" not in message
+
+
+def test_untrusted_backend_stage_is_never_echoed():
+    result = SimpleNamespace(returncode=1, stderr=b"CircuitLab backend stage failed: UNIT-SECRET")
+    code, message = ci_ship.deployment_failure(result)
+    assert code == "remote_failure" and "UNIT-SECRET" not in message

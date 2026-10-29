@@ -6,12 +6,23 @@ Run inside the deployed API container so network/configuration match the VPS.
 
 import argparse
 import json
+from pathlib import Path
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 import time
 from sqlalchemy import func, select, text
 from app.config import settings
 from app.db import EmailDelivery, Event, Evidence, Measurement, ModelRun, Session, SessionLocal
 from app.domain import record
 from app.operations import operational_status, reserve_budget, validate_runtime
+
+
+def migration_current(db):
+    """Read-only comparison against the migration heads shipped in this backend image."""
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / "migrations"))
+    expected = set(scripts.get_heads())
+    applied = set(MigrationContext.configure(db.connection()).get_current_heads())
+    return bool(expected) and applied == expected
 
 
 def inspect_environment():
@@ -45,9 +56,7 @@ def inspect_environment():
         with SessionLocal() as db:
             db.execute(text("SELECT 1 FROM users LIMIT 1"))
             checks["postgresql"] = db.bind.dialect.name == "postgresql"
-            checks["migration_current"] = (
-                db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0006"
-            )
+            checks["migration_current"] = migration_current(db)
             report["operations"] = operational_status(db)
             checks["worker_available"] = report["operations"]["worker"]["healthy"]
             checks["email_dispatch_not_stale"] = report["operations"]["email"]["stale_pending"] == 0

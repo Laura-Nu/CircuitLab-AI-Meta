@@ -1167,3 +1167,16 @@ For `remote_git_failed`, verify the deployment account can run
 SSH account and carries the gateway restriction. For `ssh_host_key`, compare the
 stored public host key against the trusted VPS console before changing it.
 Do not clear tracked changes or bypass host-key verification to make a deployment pass.
+
+
+The final production check compares every applied Alembic head with the migration
+heads shipped inside that backend image. It does not compare against a fixed old
+revision or upgrade/downgrade the database during inspection. CI migrates its isolated
+PostgreSQL service and verifies that this same production inspector accepts it before
+a deployment is eligible to run. Missing, older, unknown or extra heads fail the check.
+
+If a backend operation fails, Actions reports a fixed stage such as
+`backend_image_build`, `backend_database_backup`, `backend_database_migration`,
+`backend_services_startup` or `backend_production_checks`. These markers also work
+when the SSH gateway process started from the preceding commit. Raw Docker output
+and environment values remain excluded from the Actions log.

@@ -1,5 +1,6 @@
 """Check or deploy only CircuitLab's Compose project. Never edits Nginx or other services."""
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import re
 import socket
 import subprocess
+import sys
 from urllib.parse import unquote, urlsplit
 
 from prepare_vps import validated_target
@@ -20,6 +22,32 @@ class ConfigurationError(ValueError):
 
 class DeploymentError(RuntimeError):
     """Fixed project-ownership and execution errors."""
+
+
+BACKEND_STAGES = {
+    "project_ownership": "The existing Docker resources could not be verified as belonging to CircuitLab",
+    "source_revision": "The VPS Git revision could not be read or validated",
+    "compose_configuration": "Docker Compose rejected the production configuration",
+    "image_build": "The CircuitLab backend image could not be built",
+    "postgres_startup": "The CircuitLab PostgreSQL service did not become ready",
+    "database_backup": "The pre-migration database backup failed; migrations were not started",
+    "database_migration": "The database migration command failed; inspect the CircuitLab migration service",
+    "services_startup": "The CircuitLab API or worker failed to start or become healthy",
+    "runtime_images": "The API or worker image identity did not match the built revision",
+    "production_checks": "Final production checks failed; run python -m app.production_check in the CircuitLab API container",
+}
+
+
+@contextmanager
+def backend_stage(name):
+    if name not in BACKEND_STAGES:
+        raise ValueError("Unknown backend deployment stage")
+    try:
+        yield
+    except (DeploymentError, OSError, subprocess.SubprocessError):
+        # CI recognizes only these fixed tokens; never forward captured command output.
+        print("CircuitLab backend stage failed: " + name, file=sys.stderr)
+        raise DeploymentError(BACKEND_STAGES[name]) from None
 
 
 def read_environment(path):
@@ -122,7 +150,8 @@ def _apply(env, compose):
         raise DeploymentError("Apply must run on Linux from the configured dedicated project directory")
     if not (ROOT / "build/site/app/index.html").is_file():
         raise DeploymentError("Build the web app and landing before deployment")
-    rows = existing_project(env)
+    with backend_stage("project_ownership"):
+        rows = existing_project(env)
     owned_api = any("com.docker.compose.service=api" in row.get("Labels", "")
                     and row.get("State") == "running"
                     and ("127.0.0.1:" + env["API_BIND_PORT"] + "->8000/tcp") in row.get("Ports", "")
@@ -133,28 +162,37 @@ def _apply(env, compose):
                 listener.bind(("127.0.0.1", int(env["API_BIND_PORT"])))
             except OSError:
                 raise DeploymentError("The API port is occupied; choose another port without stopping its owner") from None
-    revision = run(["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD"], text=True).stdout.strip()
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
-        raise DeploymentError("Could not identify the CircuitLab Git revision")
+    with backend_stage("source_revision"):
+        revision = run(["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD"], text=True).stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise DeploymentError("Could not identify the CircuitLab Git revision")
     process_env = {**os.environ, **env, "CIRCUITLAB_BUILD_REVISION": revision}
-    run(compose + ["config", "--quiet"], text=True, env=process_env)
-    run(compose + ["build", "migrate"], text=True, env=process_env)
-    run(compose + ["up", "-d", "--wait", "postgres"], text=True, env=process_env)
-    backups = ROOT / ".tools/backups"
-    backups.mkdir(parents=True, exist_ok=True, mode=0o700)
-    backup = backups / ("postgres-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".dump")
-    # A dedicated database/volume is never removed or reset. Back up before migrations.
-    descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as output:
-        result = subprocess.run(compose + ["exec", "-T", "postgres", "pg_dump", "-U", env["POSTGRES_USER"], "-d", env["POSTGRES_DB"], "-Fc"], stdout=output, stderr=subprocess.PIPE, env=process_env)
-    if result.returncode or backup.stat().st_size == 0:
-        raise DeploymentError("Database backup failed; migrations were not run")
-    run(compose + ["run", "--rm", "--no-deps", "-T", "migrate"], text=True, env=process_env)
-    run(compose + ["up", "-d", "--wait", "--no-deps", "--force-recreate", "api", "worker"],
-        text=True, env=process_env)
-    verify_runtime_images(env, compose, process_env)
-    run(compose + ["exec", "-T", "api", "python", "-m", "app.production_check",
-                   "--expect-build-revision", revision], text=True, env=process_env)
+    with backend_stage("compose_configuration"):
+        run(compose + ["config", "--quiet"], text=True, env=process_env)
+    with backend_stage("image_build"):
+        run(compose + ["build", "migrate"], text=True, env=process_env)
+    with backend_stage("postgres_startup"):
+        run(compose + ["up", "-d", "--wait", "postgres"], text=True, env=process_env)
+    with backend_stage("database_backup"):
+        backups = ROOT / ".tools/backups"
+        backups.mkdir(parents=True, exist_ok=True, mode=0o700)
+        backup = backups / ("postgres-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".dump")
+        # A dedicated database/volume is never removed or reset. Back up before migrations.
+        descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as output:
+            result = subprocess.run(compose + ["exec", "-T", "postgres", "pg_dump", "-U", env["POSTGRES_USER"], "-d", env["POSTGRES_DB"], "-Fc"], stdout=output, stderr=subprocess.PIPE, env=process_env)
+        if result.returncode or backup.stat().st_size == 0:
+            raise DeploymentError("Database backup failed; migrations were not run")
+    with backend_stage("database_migration"):
+        run(compose + ["run", "--rm", "--no-deps", "-T", "migrate"], text=True, env=process_env)
+    with backend_stage("services_startup"):
+        run(compose + ["up", "-d", "--wait", "--no-deps", "--force-recreate", "api", "worker"],
+            text=True, env=process_env)
+    with backend_stage("runtime_images"):
+        verify_runtime_images(env, compose, process_env)
+    with backend_stage("production_checks"):
+        run(compose + ["exec", "-T", "api", "python", "-m", "app.production_check",
+                       "--expect-build-revision", revision], text=True, env=process_env)
     print("CircuitLab API and worker revision verified: " + revision)
     print("CircuitLab containers deployed. Nginx and other projects were not modified. Database backup: " + str(backup))
 

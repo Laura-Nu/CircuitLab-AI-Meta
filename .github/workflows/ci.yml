@@ -34,6 +34,18 @@ jobs:
         working-directory: services/backend
         env:
           DATABASE_URL: postgresql+psycopg://circuitlab:ci-only-password@localhost:5432/circuitlab_test
+      - name: Verify the production inspector accepts the migrated schema
+        working-directory: services/backend
+        env:
+          DATABASE_URL: postgresql+psycopg://circuitlab:ci-only-password@localhost:5432/circuitlab_test
+        run: |
+          uv run python - <<'PY'
+          from app.db import SessionLocal
+          from app.production_check import migration_current
+          with SessionLocal() as db:
+              assert migration_current(db), "Production inspector rejected the migrated schema"
+          print("Production migration inspection passed")
+          PY
       - run: uv run pytest -q
         working-directory: services/backend
       - run: uv run pytest -q
