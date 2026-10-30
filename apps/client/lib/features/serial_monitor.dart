@@ -139,9 +139,11 @@ class _SerialMonitorState extends State<SerialMonitor> {
     ++generation;
     timer?.cancel(); timer = null;
     await port.disconnect();
-    if (mounted) setState(() {
-      connected = false; connecting = false; automatic = false; observations = [];
-    });
+    if (mounted) {
+      setState(() {
+        connected = false; connecting = false; automatic = false; observations = [];
+      });
+    }
   }
 
   Future<void> recordNext() async {
