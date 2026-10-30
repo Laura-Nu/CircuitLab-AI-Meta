@@ -21,6 +21,7 @@ from typing import Literal
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session as DBSession
 from app import schemas as s
@@ -628,6 +629,74 @@ def manual(
         phase="verification" if session.state == "verifying" else "diagnosis",
     )
     measurement_added(db, session, measurement)
+    commit(db)
+    return serialize(measurement)
+
+
+@app.post(prefix + "/sessions/{session_id}/serial-readings", status_code=201)
+def serial_reading(
+    session_id: str, body: s.SerialReading,
+    user=Depends(current_user), db: DBSession = Depends(get_db),
+    language=Depends(request_language),
+):
+    session = authorized(db, session_id, user, write=True)
+    existing = db.scalar(select(Measurement).where(
+        Measurement.session_id == session.id, Measurement.client_id == body.client_id,
+    ))
+    if existing:
+        provenance = db.scalar(select(Event).where(
+            Event.session_id == session.id, Event.kind == "serial_reading_received",
+            Event.data["measurement_id"].as_string() == existing.id,
+        ))
+        if (existing.source != "serial_reported" or existing.point_id != body.point_id
+                or not provenance or provenance.data["line"] != body.line
+                or provenance.data["received_at"] != body.received_at):
+            raise HTTPException(409, "El identificador ya pertenece a otra lectura")
+        return serialize(existing)
+    if session.spec_version != body.spec_version or session.version != body.request_version:
+        raise HTTPException(409, "Versión desactualizada; recarga la sesión")
+    now = time.time()
+    requested_at = ((session.pending_test or {}).get("after", 0) if session.state == "verifying"
+                    else (session.pending_test or {}).get("requested_at", 0))
+    if session.state == "awaiting_measurement" and not requested_at:
+        requested_at = db.scalar(select(Event.created_at).where(
+            Event.session_id == session.id, Event.kind == "diagnosis_updated",
+        ).order_by(Event.sequence.desc()).limit(1)) or session.created_at
+    if (not now - 10 <= body.received_at <= now + 5
+            or normalized_instant(body.received_at) < normalized_instant(requested_at)):
+        raise HTTPException(422, "Espera un dato USB nuevo para esta comprobación")
+    validate_measurement(session, body.point_id, body.received_at)
+    if db.scalar(select(Job.id).where(
+        Job.session_id == session.id, Job.status.in_(["pending", "running"]),
+    ).limit(1)):
+        raise HTTPException(409, "Ya existe un trabajo pendiente")
+    if db.scalar(select(Command.id).where(
+        Command.session_id == session.id, Command.status.in_(["pending", "sent"]),
+    ).limit(1)):
+        raise HTTPException(409, "Ya existe un comando pendiente")
+    try:
+        telemetry = s.SerialTelemetry.model_validate_json(body.line)
+    except ValidationError:
+        raise HTTPException(422, "El dato USB no cumple el formato de telemetría") from None
+    point = next(p for p in session.specification["points"] if p["id"] == body.point_id)
+    if point_unit(point) != ("V" if telemetry.unit == "mV" else telemetry.unit):
+        raise HTTPException(422, "La unidad no coincide con el tipo de medición del esquema")
+    value = telemetry.value / 1000 if telemetry.unit == "mV" else telemetry.value
+    measurement = Measurement(
+        session_id=session.id, client_id=body.client_id, point_id=body.point_id,
+        **observation_fields(value, telemetry.unit), source="serial_reported",
+        measured_at=normalized_instant(body.received_at),
+        phase="verification" if session.state == "verifying" else "diagnosis",
+    )
+    session.language = language
+    measurement_added(db, session, measurement)
+    record(db, session, "serial_reading_received", {
+        "measurement_id": measurement.id, "channel": telemetry.channel,
+        "sensor": telemetry.sensor, "board": telemetry.board, "label": telemetry.label,
+        "line": body.line, "received_at": body.received_at,
+        "spec_version": body.spec_version, "request_version": body.request_version,
+        "source": "serial_reported", "physical_verification": False,
+    })
     commit(db)
     return serialize(measurement)
 

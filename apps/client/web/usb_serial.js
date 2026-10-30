@@ -4,6 +4,7 @@
   let port = null, reader = null, writer = null, reading = null, pending = null;
   let buffer = "", closing = null;
   const seen = new Map();
+  const observations = new Map();
   const openingPorts = new Set();
   let generation = 0, starting = null;
   let monitor = false, serialLines = [], serialBytes = 0, serialSequence = 0, dropped = 0;
@@ -43,7 +44,7 @@
         await bounded(opened, 10000, "open_timeout");
         if (generation !== attempt) return JSON.stringify({status: "cancelled"});
         port = selected; buffer = ""; seen.clear();
-        monitor = passive; serialLines = []; serialBytes = 0; serialSequence = 0; dropped = 0;
+        monitor = passive; serialLines = []; serialBytes = 0; serialSequence = 0; dropped = 0; observations.clear();
         if (!port.readable || !port.writable) throw {code: "port_unavailable"};
         stage("starting_instrument");
         reading = readLoop(selected, attempt);
@@ -53,7 +54,7 @@
           await api.disconnect();
           return JSON.stringify({status: "tab_hidden"});
         }
-        buffer = "";
+        if (!passive) buffer = "";
         return JSON.stringify({status: "connected"});
       } catch (error) {
         if (generation === attempt) ++generation;
@@ -72,7 +73,7 @@
     },
     monitorSnapshot() {
       return JSON.stringify({connected: !!port && monitor, sequence: serialSequence,
-        lines: serialLines.map(item => item.text), dropped});
+        lines: serialLines.map(item => item.text), observations: [...observations.values()], dropped});
     },
     async disconnect() {
       ++generation;
@@ -87,7 +88,7 @@
         try { await bounded(Promise.resolve(reading), 1500, "cleanup_timeout"); } catch (_) {}
         try { await bounded(Promise.resolve(previous?.close()), 1500, "cleanup_timeout"); } catch (_) {}
         reading = null; buffer = ""; seen.clear();
-        monitor = false; serialLines = []; serialBytes = 0;
+        monitor = false; serialLines = []; serialBytes = 0; observations.clear();
       })();
       try { await closing; } finally { closing = null; }
     },
@@ -134,11 +135,16 @@
   }
   function line(raw) {
     if (monitor) {
+      const observation = telemetry(raw);
       const text = raw.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim();
       if (!text) return;
       if (text.length > 500) { ++dropped; return; }
       const bytes = new TextEncoder().encode(text).length;
       serialLines.push({text, bytes}); serialBytes += bytes; ++serialSequence;
+      if (observation && (observations.has(observation.channel) || observations.size < 32)) {
+        observations.set(observation.channel, {...observation, line: raw,
+          received_at: Date.now() / 1000, sequence: serialSequence});
+      }
       while (serialLines.length > 100 || serialBytes > 24000) {
         serialBytes -= serialLines.shift().bytes; ++dropped;
       }
@@ -164,6 +170,32 @@
       settle({status: "out_of_range", sample_count: 0}); return;
     }
     settle({status: "ok", value: result.value, sample_count: result.sample_count});
+  }
+  function telemetry(raw) {
+    if (raw.length > 500) return null;
+    let value;
+    try { value = JSON.parse(raw); } catch (_) { return null; }
+    if (!value || Array.isArray(value) || typeof value !== "object" || value.circuitlab !== 1 ||
+        typeof value.channel !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,79}$/.test(value.channel)) return null;
+    const invalid = {channel: value.channel, invalid: true};
+    if (Object.keys(value).some(key => !["circuitlab", "channel", "value", "unit", "sensor", "board", "label"].includes(key))) return invalid;
+    const cleanText = (text, maximum, trimmed = false) => typeof text === "string" && text.length <= maximum &&
+      text.trim().length > 0 && (!trimmed || text === text.trim()) && !/[\u0000-\u001f\u007f-\u009f]/.test(text);
+    if (!cleanText(value.unit, 24, true)) return invalid;
+    for (const [key, maximum] of [["sensor", 80], ["board", 120], ["label", 120]]) {
+      if (Object.hasOwn(value, key) && !cleanText(value[key], maximum, true)) return invalid;
+    }
+    if (typeof value.value === "boolean") {
+      if (value.unit !== "boolean") return invalid;
+    } else if (typeof value.value === "string") {
+      if (value.unit !== "text" || !cleanText(value.value, 500)) return invalid;
+    } else if (typeof value.value === "number" && Number.isFinite(value.value)) {
+      if (["boolean", "text"].includes(value.unit) ||
+          (value.unit === "V" && (value.value < 0 || value.value > 5)) ||
+          (value.unit === "mV" && (value.value < 0 || value.value > 5000))) return invalid;
+    } else return invalid;
+    const {circuitlab, ...observation} = value;
+    return observation;
   }
   function stage(value) {
     try { api.onState?.(value); } catch (_) {}

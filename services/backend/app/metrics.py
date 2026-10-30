@@ -165,7 +165,7 @@ def operational_metrics(db, days, mode, now=None):
               "p95_latency_ms": percentile(durations, .95)},
         "sessions": {"created": sum(states.values()), "current_states": states,
                      "physical_verifications": physical or 0},
-        "measurements": {key: sources.get(key, 0) for key in ("instrumented", "manual", "simulated")},
+        "measurements": {key: sources.get(key, 0) for key in ("instrumented", "manual", "simulated", "serial_reported")},
         "queue": {"pending": queue.get("pending", 0), "running": queue.get("running", 0)},
         "daily": [{**{k: v for k, v in day.items() if k != "latency_total_ms"},
                    "mean_latency_ms": round(day["latency_total_ms"] / day["latency_samples"], 1)

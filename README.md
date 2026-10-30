@@ -12,7 +12,7 @@ The local preview runs in explicitly labeled simulation mode.
 - Organizes private investigations for Arduino/ESP32 and other boards with multiple modules, custom low-voltage projects, LED/resistor circuits, dividers and analog/digital sensors.
 - Combines photographs, confirmed connections and authorized test points with competing fault hypotheses.
 - Explains the next useful measurement and the different outcomes predicted by each hypothesis.
-- Records manual or instrumented readings, including their source and calibration identifier.
+- Records manual, instrumented or board-reported serial readings, preserving their source and any instrument calibration identifier.
 - Keeps the human operator in control of physical changes and checks fresh readings against fixed criteria.
 - Exports an investigation as JSON or Markdown and supports authenticated, read-only reviewers.
 - Provides account administration, session revocation and password recovery through Resend.
@@ -25,13 +25,13 @@ The local preview runs in explicitly labeled simulation mode.
 2. Confirm connections, operating conditions and up to 32 observations: voltage ranges, numeric sensor values with units, boolean states or exact text/codes.
 3. Attach circuit photographs and request analysis. The specification is frozen when analysis starts.
 4. Review competing explanations, predicted outcomes and the proposed measurement or clarification.
-5. Confirm the measurement conditions and record a manual reading or request an instrument reading.
+5. Confirm the measurement conditions and collect the requested reading: automatically from a linked board telemetry channel, manually, or with an instrument.
 6. Review the proposed intervention, disconnect power for wiring changes and confirm the action performed.
 7. Restore the operating conditions and collect fresh readings for every specified point.
 8. Perform the stated functional test, record its observed pass/fail result, then run verification and review the report and event history.
 
 The model proposes diagnostic steps. The backend enforces state transitions and
-checks fresh voltage readings and the separately recorded functional observation independently from the model's explanation. A failed or missing functional observation cannot produce a verified repair.
+checks fresh typed readings and the separately recorded functional observation independently from the model's explanation. A failed or missing functional observation cannot produce a verified repair.
 
 ## Technologies and architecture
 
@@ -245,10 +245,14 @@ discover GPIO, I2C or SPI modules. A Raspberry Pi computer may require a configu
 serial interface or a suitable USB–UART connection, depending on its hardware and setup.
 See the [Raspberry Pi serial documentation](https://www.raspberrypi.com/documentation/computers/configuration.html#configure-uarts).
 
-Inside the session, **Board USB · Data monitor** reads the board's existing serial
-output at the selected baud rate. It is passive: it sends no acquisition commands,
-uploads no sketch and does not discover connected sensors. Its firmware must already
-emit actual sensor values or status lines, for example with `Serial.println`.
+Inside the session, the **Board USB** monitor reads the board's existing serial
+output at the selected baud rate. Firmware can declare named channels, sensor names,
+typed values and units through one-line JSON telemetry. Link those channels to the
+confirmed observations and enable automatic recording after confirming the test
+conditions. Fresh readings for the requested check then enter the diagnosis and
+advance analysis without transcription. The monitor sends no acquisition commands
+and uploads no sketch. Sensor names come from the firmware, not USB detection.
+See the [Spanish USB diagnosis guide](docs/USB_DIAGNOSTICS.md) for setup and firmware output.
 Close another IDE serial monitor before connecting. Browser serial access requires
 a supported desktop browser and a secure context. Android retains manual recording.
 
@@ -257,8 +261,9 @@ session. Up to 100 complete lines / 24 KB are retained; lines over 500 character
 skipped. The API permits twenty captures per session and includes the latest five in
 the diagnostic context. Captures are deduplicated by client ID and cannot be added
 during active inference. Saved captures remain readable in session results and reports.
-Firmware text is untrusted evidence, not an independently calibrated measurement or
-automatic repair verification. Record requested observations explicitly to check criteria.
+Arbitrary firmware text remains untrusted context. Structured observations use the
+separate `serial_reported` reading source and do not claim instrument calibration or
+physical repair verification. Functional checks and physical interventions remain explicit.
 
 The separate **USB instrument** path continues to use the fixed TP1/A0, TP2/A1,
 TP3/A2 ADC/GPIO protocol. It does not measure temperature, decode RFID/SPI, or turn
@@ -312,7 +317,8 @@ example provides guidance without pre-filling fields or changing USB channel map
 
 Each session has a **Results and report** card showing persisted readings,
 the latest instrument request outcome, and a report available during the
-investigation. A USB connection alone does not start continuous acquisition.
+investigation. The fixed-protocol USB instrument requires a requested reading; the
+board monitor can automatically record explicitly linked telemetry channels.
 Diagnostic readings keep the point requested by the current check; the dialog
 explains its schematic label and the fixed TP1/A0, TP2/A1, TP3/A2 instrument
 channel mapping. Displayed readings and readable reports omit padding zeros

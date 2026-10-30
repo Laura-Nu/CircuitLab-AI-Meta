@@ -1,18 +1,21 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../core/networking/api.dart';
+import '../core/measurement_points.dart';
 import '../core/usb_serial.dart';
 import '../l10n/app_strings.dart';
 
-/// Passive board output. Saving is explicit; firmware text never becomes an ADC reading.
+/// Board-reported data stays separate from the calibrated ADC/GPIO instrument.
 class SerialMonitor extends StatefulWidget {
   final CircuitApi api;
   final String sessionId;
   final bool canSave;
   final Future<void> Function() onSaved;
   final UsbSerialPort? serial;
+  final Map<String, dynamic> session;
   const SerialMonitor({super.key, required this.api, required this.sessionId,
-    required this.canSave, required this.onSaved, this.serial});
+    required this.canSave, required this.onSaved, this.serial, this.session = const {}});
   @override
   State<SerialMonitor> createState() => _SerialMonitorState();
 }
@@ -29,6 +32,51 @@ class _SerialMonitorState extends State<SerialMonitor> {
   List<String>? captureLines;
   int captureSequence = 0;
   int captureBaudRate = 115200;
+  List<Map<String, dynamic>> observations = [];
+  final bindings = <String, String>{};
+  final submitted = <String>{};
+  bool automatic = false, recording = false;
+  int freshAfter = 0;
+  Map<String, dynamic>? pendingReading;
+  int? waitingVersion;
+
+  int currentSequence() => (port.monitorSnapshot()['sequence'] as num?)?.toInt() ?? sequence;
+
+  List<Map> get points => (widget.session['specification']?['points'] as List? ?? []).cast<Map>();
+  String requestKey(Map session) => '${session['spec_version']}:${session['analysis_steps']}:'
+      '${session['state']}:${session['pending_test']?['point_id']}:'
+      '${session['pending_test']?['requested_at']}:${session['pending_test']?['after']}';
+  List<Map> get requestedPoints {
+    if (widget.session['state'] == 'awaiting_measurement') {
+      return points.where((point) => point['id'] == widget.session['pending_test']?['point_id']).toList();
+    }
+    if (widget.session['state'] == 'verifying') {
+      final missing = widget.session['completion']?['missing_points'] as List? ?? [];
+      return points.where((point) => missing.contains(point['id'])).toList();
+    }
+    return [];
+  }
+
+  @override
+  void didUpdateWidget(covariant SerialMonitor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId) {
+      automatic = false;
+      bindings.clear(); submitted.clear(); observations = []; lines = []; waitingVersion = null;
+      pendingReading = null;
+      if (connected || connecting) unawaited(disconnect());
+    }
+    if (requestKey(oldWidget.session) != requestKey(widget.session)) {
+      // A buffered sample from the previous request must never answer a new test.
+      freshAfter = currentSequence();
+      submitted.clear();
+      pendingReading = null;
+    }
+    if (oldWidget.session['spec_version'] != widget.session['spec_version'] ||
+        oldWidget.session['pending_test']?['after'] != widget.session['pending_test']?['after']) {
+      automatic = false;
+    }
+  }
 
   @override
   void initState() {
@@ -49,9 +97,17 @@ class _SerialMonitorState extends State<SerialMonitor> {
         lines = List<String>.from(snapshot['lines']);
         sequence = snapshot['sequence'] as int;
         dropped = snapshot['dropped'] as int;
+        observations = (snapshot['observations'] as List? ?? [])
+            .map((sample) => Map<String, dynamic>.from(sample as Map)).toList();
+      } else {
+        automatic = false;
+        observations = [];
       }
     });
     if (!connected) { timer?.cancel(); timer = null; }
+    if (connected && automatic && !recording && !saving && widget.canSave) {
+      unawaited(recordNext());
+    }
   }
 
   Future<void> connect() async {
@@ -68,7 +124,9 @@ class _SerialMonitorState extends State<SerialMonitor> {
         return;
       }
       lines = []; sequence = 0; savedSequence = 0; captureId = null; captureLines = null;
+      automatic = false; bindings.clear(); submitted.clear(); pendingReading = null; waitingVersion = null;
       poll();
+      freshAfter = sequence;
       timer = Timer.periodic(const Duration(seconds: 1), (_) => poll());
     } catch (e) {
       if (mounted && attempt == generation) setState(() => error = errorMessage(e, language: widget.api.language));
@@ -81,7 +139,59 @@ class _SerialMonitorState extends State<SerialMonitor> {
     ++generation;
     timer?.cancel(); timer = null;
     await port.disconnect();
-    if (mounted) setState(() { connected = false; connecting = false; });
+    if (mounted) setState(() {
+      connected = false; connecting = false; automatic = false; observations = [];
+    });
+  }
+
+  Future<void> recordNext() async {
+    if (!widget.api.signedIn || requestedPoints.isEmpty) return;
+    // A coalesced refresh may return before the acknowledged server version arrives.
+    if (waitingVersion != null && (widget.session['version'] as num? ?? 0) <= waitingVersion!) return;
+    waitingVersion = null;
+    final after = widget.session['pending_test']?['requested_at'] ?? widget.session['pending_test']?['after'] ?? 0;
+    Map? selected;
+    Map<String, dynamic>? sample;
+    for (final point in requestedPoints) {
+      if (submitted.contains('${requestKey(widget.session)}:${point['id']}')) continue;
+      for (final observation in observations) {
+        if (bindings[point['id']] == observation['channel'] &&
+            serialSupportsObservation(point, observation) &&
+            (observation['sequence'] as num) > freshAfter &&
+            (observation['received_at'] as num) >= (after as num) &&
+            DateTime.now().millisecondsSinceEpoch / 1000 - (observation['received_at'] as num) <= 10) {
+          selected = point; sample = observation; break;
+        }
+      }
+      if (selected != null) break;
+    }
+    final request = requestKey(widget.session);
+    final attempt = generation;
+    if (pendingReading == null) {
+      if (selected == null || sample == null) return;
+      pendingReading = {
+        'client_id': clientId(), 'point_id': selected['id'], 'line': sample['line'],
+        'received_at': sample['received_at'], 'conditions_confirmed': true,
+        'spec_version': widget.session['spec_version'], 'request_version': widget.session['version'],
+      };
+    }
+    final payload = pendingReading!;
+    setState(() => recording = true);
+    try {
+      await widget.api.request('/sessions/${widget.sessionId}/serial-readings', method: 'POST', data: payload);
+      if (!mounted || generation != attempt || requestKey(widget.session) != request) return;
+      submitted.add('$request:${payload['point_id']}');
+      waitingVersion = (payload['request_version'] as num).toInt();
+      pendingReading = null;
+      await widget.onSaved();
+    } catch (e) {
+      if (!mounted || generation != attempt || requestKey(widget.session) != request) return;
+      // Retry uncertain delivery with the same payload; discard a definite rejection.
+      if (e is DioException && e.response != null && (e.response!.statusCode ?? 500) < 500) pendingReading = null;
+      setState(() { automatic = false; error = errorMessage(e, language: widget.api.language); });
+    } finally {
+      if (mounted) setState(() => recording = false);
+    }
   }
 
   Future<void> save() async {
@@ -115,6 +225,87 @@ class _SerialMonitorState extends State<SerialMonitor> {
     super.dispose();
   }
 
+  Widget automaticReadings(AppStrings strings) {
+    String sampleValue(Map sample) => sample['unit'] == 'boolean'
+        ? strings.t(sample['value'] == true ? 'observationYes' : 'observationNo')
+        : strings.observation(sample['value'], sample['unit']);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SizedBox(height: 16),
+      Text(strings.t('serialChannelsTitle'), style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      Text(strings.t('serialChannelsHelp')),
+      if (observations.isNotEmpty) ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(strings.t('serialAvailableChannels', {'count': observations.length})),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (final sample in observations) Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text('${sample['sensor'] ?? sample['board'] ?? ''} ${sample['channel']} · '
+              '${sample['invalid'] == true ? strings.t('serialInvalidValue') : sampleValue(sample)}'.trim()),
+        )],
+      ),
+      if (observations.any((sample) => sample['invalid'] == true)) Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(strings.t('serialInvalidChannels', {
+          'count': observations.where((sample) => sample['invalid'] == true).length,
+        }), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ),
+      if (points.isEmpty) Padding(
+        padding: const EdgeInsets.only(top: 12), child: Text(strings.t('serialConfirmCriteria')),
+      ),
+      for (final point in points) Builder(builder: (context) {
+        final compatible = observations.where((sample) => serialSupportsObservation(point, sample)).toList();
+        final chosen = compatible.any((sample) => sample['channel'] == bindings[point['id']])
+            ? bindings[point['id']] : null;
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('serial-channel-${point['id']}-$chosen'),
+            initialValue: chosen, isExpanded: true, isDense: false, itemHeight: null,
+            decoration: InputDecoration(labelText: '${point['label']}',
+              helperText: compatible.isEmpty ? strings.t('serialNoMatchingChannel') : strings.criterion(point),
+              helperMaxLines: 4),
+            hint: Text(strings.t('serialChooseChannel')),
+            items: [for (final sample in compatible) DropdownMenuItem(
+              value: sample['channel'] as String,
+              child: Text('${sample['sensor'] ?? sample['board'] ?? ''} ${sample['channel']} · '
+                  '${sampleValue(sample)}'.trim(), maxLines: 4),
+            )],
+            onChanged: recording || compatible.isEmpty ? null : (value) => setState(() {
+              bindings[point['id'] as String] = value!;
+              automatic = false; pendingReading = null; freshAfter = currentSequence();
+            }),
+          ),
+        );
+      }),
+      if (points.isNotEmpty) SwitchListTile(
+        key: const ValueKey('serial-automatic'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(strings.t('serialAutomatic')),
+        subtitle: Text(strings.t('serialAutomaticConsent')),
+        value: automatic,
+        onChanged: !recording && (automatic || (widget.canSave && bindings.isNotEmpty))
+            ? (value) => setState(() { automatic = value; freshAfter = currentSequence(); error = null; }) : null,
+      ),
+      if (automatic) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(
+        strings.t(recording ? 'serialRecording' : requestedPoints.isEmpty ? 'serialAutoPaused' : 'serialAutoWaiting'),
+        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+      )),
+      if (observations.isEmpty || observations.every((sample) => sample['invalid'] == true)) ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(strings.t('serialFormatTitle')),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(strings.t('serialFormatHelp')),
+          const SizedBox(height: 8),
+          const SelectableText('{"circuitlab":1,"channel":"dht11.temperature",'
+              '"sensor":"DHT11","value":23.5,"unit":"°C"}'),
+          const SizedBox(height: 12),
+        ],
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
@@ -124,6 +315,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
       title: Text(strings.t('serialMonitorTitle')),
       subtitle: Text(strings.t('serialMonitorSubtitle')),
       leading: const Icon(Icons.usb),
+      initiallyExpanded: widget.session.isNotEmpty,
       childrenPadding: const EdgeInsets.only(bottom: 20),
       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -147,7 +339,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
                   textAlign: TextAlign.center),
               ),
               FilledButton.icon(
-                onPressed: widget.canSave && !saving && lines.isNotEmpty && sequence != savedSequence ? save : null,
+                onPressed: widget.canSave && !recording && !saving && lines.isNotEmpty && sequence != savedSequence ? save : null,
                 icon: const Icon(Icons.save_outlined),
                 label: Text(strings.t(saving ? 'serialSaving' : 'serialSave'), textAlign: TextAlign.center),
               ),
@@ -160,6 +352,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
           }),
           const SizedBox(height: 12),
           Text(strings.t(connecting ? 'serialConnecting' : connected ? 'serialListening' : 'serialDisconnected')),
+          if (connected) automaticReadings(strings),
           if (lines.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(strings.t('serialWaiting')))
           else Container(

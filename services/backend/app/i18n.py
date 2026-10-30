@@ -4,6 +4,9 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "El identificador ya pertenece a otra lectura": ("serial_reading_conflict", "This identifier already belongs to a different reading"),
+    "Espera un dato USB nuevo para esta comprobación": ("serial_reading_stale", "Wait for a fresh USB value for this check"),
+    "El dato USB no cumple el formato de telemetría": ("serial_reading_invalid", "The USB value does not match the telemetry format"),
     "Máximo 20 capturas seriales por sesión": ("serial_capture_limit", "At most 20 serial captures per session"),
     "Este dato requiere una lectura del sensor; el instrumento solo mide voltaje o estado digital": (
         "sensor_reading_required", "This value requires a sensor observation; the instrument only reads voltage or digital state"),
@@ -185,6 +188,7 @@ LABELS = {
     "inconclusive": ("Finalizada: sin conclusión", "Finished: inconclusive"),
     "cancelled": ("Cerrada sin verificar", "Closed without verification"),
     "manual": ("Manual", "Manual"),
+    "serial_reported": ("USB · informado por la placa", "USB · board reported"),
     "instrumented": ("Instrumentada", "Instrumented"),
     "simulated": ("Simulada", "Simulated"),
     "led_resistor": ("LED + resistencia", "LED + resistor"),

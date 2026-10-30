@@ -66,6 +66,119 @@ test('Board monitor rejects unsupported baud rates and shares the exclusive port
   assert.equal(JSON.parse(f.api.monitorSnapshot()).connected,false);
   await f.api.disconnect();
 });
+
+test('Structured board telemetry preserves multiple sensor types, false and zero without USB writes',async()=>{
+  const f=fixture(); await f.api.connectMonitor(115200);
+  const samples=[
+    {channel:'dht11.temperature',value:23.5,unit:'°C',sensor:'DHT11',board:'Arduino UNO',label:'Temperature'},
+    {channel:'dht11.humidity',value:0,unit:'%',sensor:'DHT11'},
+    {channel:'gps.fix',value:false,unit:'boolean',sensor:'NEO-8M'},
+    {channel:'rfid.uid',value:' AB12CD34 ',unit:'text',sensor:'RC522'},
+    {channel:'supply',value:3.3,unit:'V'},
+  ];
+  for(const sample of samples) f.sendText(JSON.stringify({circuitlab:1,...sample})+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const actual=JSON.parse(f.api.monitorSnapshot()).observations;
+  assert.equal(actual.length,samples.length);
+  for(let i=0;i<samples.length;i++) {
+    const {line,received_at,sequence,...sample}=actual[i];
+    assert.deepEqual(sample,samples[i]);
+    assert.deepEqual(JSON.parse(line),{circuitlab:1,...samples[i]});
+    assert.equal(sequence,i+1); assert.ok(Number.isFinite(received_at));
+  }
+  assert.equal(f.writes.length,0); await f.api.disconnect();
+  assert.deepEqual(JSON.parse(f.api.monitorSnapshot()).observations,[]);
+  f.port.readable=new ReadableStream({start(){}});
+  assert.equal(JSON.parse(await f.api.connectMonitor(115200)).status,'connected');
+  const reopened=JSON.parse(f.api.monitorSnapshot());
+  assert.deepEqual(reopened.observations,[]); assert.equal(reopened.sequence,0);
+  await f.api.disconnect();
+});
+
+test('Telemetry never guesses plain logs and rejects malformed or ambiguous samples before sanitization',async()=>{
+  const f=fixture(); await f.api.connectMonitor(115200);
+  const base={circuitlab:1,channel:'sensor.value',value:1,unit:'%'};
+  const invalid=[
+    {circuitlab:2},{circuitlab:'1'},{channel:'sensor bad'},{channel:'x'.repeat(81)},
+    {unit:''},{unit:' '},{unit:' %'},{unit:'% '},{unit:'x'.repeat(25)},{unit:'°\u0001C'},
+    {value:null},{value:[]},{value:{}},{value:false},{value:1,unit:'boolean'},
+    {value:'1'},{value:'',unit:'text'},{value:'\n',unit:'text'},
+    {value:6,unit:'V'},{value:-1,unit:'V'},{value:5001,unit:'mV'},
+    {sensor:'x'.repeat(81)},{board:'x'.repeat(121)},{label:'x'.repeat(121)},
+    {sensor:1},{sensor:' DHT11'},{sensor:'DHT11 '},{board:' '},{board:' Arduino UNO'},
+    {label:'Temperature '},{extra:true},
+  ];
+  for(const changes of invalid) f.sendText(JSON.stringify({...base,...changes})+'\n');
+  f.sendText('DHT11 temperature=23.5 C\n'+JSON.stringify({...base,circuitlab:undefined})+'\n');
+  f.sendText('{"circuitlab":1,"channel":"sensor.value","value":1e999,"unit":"%"}\n');
+  f.sendText('{"circuitlab":1,"channel":"sensor.value","value":23.5,"unit":"°C","sensor":"DHT\u000111"}\n');
+  f.sendText(JSON.stringify({...base,label:'x'.repeat(120),board:'y'.repeat(120),sensor:'z'.repeat(80),value:'v'.repeat(180),unit:'text'})+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const rejected=JSON.parse(f.api.monitorSnapshot()).observations;
+  assert.equal(rejected.length,1);
+  assert.equal(rejected[0].channel,'sensor.value');
+  assert.equal(rejected[0].invalid,true);
+  assert.equal(rejected[0].value,undefined);
+  assert.equal(f.writes.length,0); await f.api.disconnect();
+});
+
+test('An explicit invalid sensor sample replaces its older valid reading until recovery',async()=>{
+  const f=fixture(); await f.api.connectMonitor(115200);
+  const base={circuitlab:1,channel:'dht11.temperature',value:23.5,unit:'°C'};
+  f.sendText(JSON.stringify(base)+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const good=JSON.parse(f.api.monitorSnapshot()).observations[0];
+  f.sendText('dht11.temperature unrelated plain log\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  assert.deepEqual(JSON.parse(f.api.monitorSnapshot()).observations[0],good);
+  for(const value of [null,'NaN',false]) {
+    f.sendText(JSON.stringify({...base,value})+'\n');
+    await new Promise(resolve=>setTimeout(resolve,5));
+    const invalid=JSON.parse(f.api.monitorSnapshot()).observations[0];
+    assert.equal(invalid.channel,base.channel); assert.equal(invalid.invalid,true);
+    assert.equal(invalid.value,undefined); assert.ok(invalid.sequence>good.sequence);
+  }
+  f.sendText(JSON.stringify({...base,value:0})+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const recovered=JSON.parse(f.api.monitorSnapshot()).observations[0];
+  assert.equal(recovered.value,0); assert.equal(recovered.invalid,undefined);
+  assert.equal(f.writes.length,0); await f.api.disconnect();
+});
+
+test('Telemetry retains only 32 channels and never refreshes a silent sensor from other logs',async()=>{
+  const f=fixture(); let now=1000; f.sandbox.Date={now:()=>now};
+  await f.api.connectMonitor(115200);
+  for(let i=0;i<33;i++) f.sendText(JSON.stringify({circuitlab:1,channel:'sensor.'+i,value:i,unit:'%'})+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const first=JSON.parse(f.api.monitorSnapshot()).observations;
+  assert.equal(first.length,32); assert.equal(first[0].received_at,1);
+  assert.equal(first.some(sample=>sample.channel==='sensor.32'),false);
+  now=9000;
+  f.sendText('unrelated boot log\n');
+  f.sendText(JSON.stringify({circuitlab:1,channel:'sensor.31',value:0,unit:'%'})+'\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const latest=JSON.parse(f.api.monitorSnapshot());
+  assert.deepEqual(latest.observations[0],first[0]);
+  assert.equal(latest.observations[31].value,0);
+  assert.equal(latest.observations[31].received_at,9);
+  assert.equal(latest.observations[31].sequence,35);
+  await f.api.disconnect();
+});
+
+test('A partial telemetry line received during board startup survives the startup wait',async()=>{
+  const f=fixture();
+  const raw=JSON.stringify({circuitlab:1,channel:'gps.fix',value:false,unit:'boolean'});
+  f.api.onState=stage=>{if(stage==='starting_instrument')f.sendText(raw.slice(0,30));};
+  assert.equal(JSON.parse(await f.api.connectMonitor(115200)).status,'connected');
+  f.sendText(raw.slice(30)+'\r\n');
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const snapshot=JSON.parse(f.api.monitorSnapshot());
+  assert.equal(snapshot.observations.length,1);
+  assert.equal(snapshot.observations[0].value,false);
+  assert.equal(snapshot.observations[0].line,raw+'\r');
+  await f.api.disconnect();
+});
+
 test('Actual framing handles partial lines and never reacquires a duplicate command',async()=>{
   const f=fixture((c,input)=>{
     const text=JSON.stringify(good(c))+'\n';

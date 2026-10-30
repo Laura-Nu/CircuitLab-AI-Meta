@@ -87,6 +87,12 @@ def snapshot(db, session):
                 Event.session_id == session.id, Event.kind == "serial_captured",
             ).order_by(Event.sequence.desc()).limit(5))
         ],
+        "serial_provenance": [
+            {key: e.data.get(key) for key in ("measurement_id", "channel", "sensor", "board", "label", "received_at")}
+            for e in db.scalars(select(Event).where(
+                Event.session_id == session.id, Event.kind == "serial_reading_received",
+            ).order_by(Event.sequence.desc()).limit(32))
+        ],
         "test_catalog": [localized_voltage_test(session.language), localized_digital_test(session.language)],
         "connection_confirmations": [
             e.data
@@ -210,6 +216,8 @@ def process(job_id, lease_token):
             else:
                 session.analysis_steps += 1
                 data = {**output.model_dump(), "language": session.language}
+                if output.action in {"read_voltage", "read_digital", "request_manual_measurement"}:
+                    data["requested_at"] = time.time()
                 db.add(ModelRun(session_id=session.id, data={**metadata, "output": data}))
                 for index, hypothesis in enumerate(output.hypotheses):
                     translations = (

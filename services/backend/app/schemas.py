@@ -130,13 +130,9 @@ class EvidenceRemoval(Strict):
     confirmed: Literal[True]
 
 
-class ManualMeasurement(Strict):
-    client_id: str = Field(min_length=8, max_length=80)
-    point_id: str = Field(max_length=4)
+class ObservationValue(Strict):
     value: float | StrictBool | str
     unit: str = Field(default="V", min_length=1, max_length=24, pattern=r"^[^\s\x00-\x1f][^\x00-\x1f]*$")
-    measured_at: float = Field(gt=0)
-    conditions_confirmed: Literal[True]
 
     @model_validator(mode="before")
     @classmethod
@@ -157,6 +153,54 @@ class ManualMeasurement(Strict):
         if self.unit in {"V", "mV"} and not 0 <= self.value <= (5 if self.unit == "V" else 5000):
             raise ValueError("Voltage is outside the supported range")
         return self
+
+
+class ManualMeasurement(ObservationValue):
+    client_id: str = Field(min_length=8, max_length=80)
+    point_id: str = Field(max_length=4)
+    measured_at: float = Field(gt=0)
+    conditions_confirmed: Literal[True]
+
+
+class SerialTelemetry(ObservationValue):
+    circuitlab: Literal[1]
+    channel: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,79}$")
+    unit: str = Field(min_length=1, max_length=24, pattern=r"^[^\s\x00-\x1f][^\x00-\x1f]*$")
+    sensor: str | None = Field(default=None, min_length=1, max_length=80)
+    board: str | None = Field(default=None, min_length=1, max_length=120)
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator("value")
+    @classmethod
+    def clean_text_value(cls, value):
+        if isinstance(value, str) and any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value):
+            raise ValueError("Serial text values cannot contain control characters")
+        return value
+
+    @field_validator("unit", "sensor", "board", "label")
+    @classmethod
+    def clean_metadata(cls, value):
+        if value is None or (not value.strip() or value != value.strip()
+                             or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value)):
+            raise ValueError("Serial metadata must be trimmed text without control characters")
+        return value
+
+    @field_validator("circuitlab", mode="before")
+    @classmethod
+    def exact_protocol(cls, value):
+        if type(value) is not int or value != 1:
+            raise ValueError("Unsupported serial telemetry protocol")
+        return value
+
+
+class SerialReading(Strict):
+    client_id: str = Field(min_length=8, max_length=80)
+    point_id: str = Field(pattern=r"^TP[1-9][0-9]?$", max_length=4)
+    line: str = Field(min_length=1, max_length=500)
+    received_at: float = Field(gt=0)
+    conditions_confirmed: Literal[True]
+    spec_version: int = Field(ge=1)
+    request_version: int = Field(ge=1)
 
 
 class SerialCapture(Strict):

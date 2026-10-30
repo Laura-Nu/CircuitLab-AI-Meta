@@ -1360,6 +1360,58 @@
         }
       }
     },
+    "/api/v1/sessions/{session_id}/serial-readings": {
+      "post": {
+        "summary": "Serial Reading",
+        "operationId": "serial_reading_api_v1_sessions__session_id__serial_readings_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SerialReading"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}/interventions": {
       "post": {
         "summary": "Intervention",
@@ -2650,17 +2702,6 @@
       },
       "ManualMeasurement": {
         "properties": {
-          "client_id": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 8,
-            "title": "Client Id"
-          },
-          "point_id": {
-            "type": "string",
-            "maxLength": 4,
-            "title": "Point Id"
-          },
           "value": {
             "anyOf": [
               {
@@ -2683,6 +2724,17 @@
             "title": "Unit",
             "default": "V"
           },
+          "client_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Client Id"
+          },
+          "point_id": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Point Id"
+          },
           "measured_at": {
             "type": "number",
             "exclusiveMinimum": 0.0,
@@ -2697,9 +2749,9 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "value",
           "client_id",
           "point_id",
-          "value",
           "measured_at",
           "conditions_confirmed"
         ],
@@ -2920,6 +2972,60 @@
           "lines"
         ],
         "title": "SerialCapture"
+      },
+      "SerialReading": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Client Id"
+          },
+          "point_id": {
+            "type": "string",
+            "maxLength": 4,
+            "pattern": "^TP[1-9][0-9]?$",
+            "title": "Point Id"
+          },
+          "line": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Line"
+          },
+          "received_at": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Received At"
+          },
+          "conditions_confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Conditions Confirmed"
+          },
+          "spec_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Spec Version"
+          },
+          "request_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Request Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "client_id",
+          "point_id",
+          "line",
+          "received_at",
+          "conditions_confirmed",
+          "spec_version",
+          "request_version"
+        ],
+        "title": "SerialReading"
       },
       "SessionCreate": {
         "properties": {

@@ -76,7 +76,7 @@ def test_real_audits_are_counted_once_with_separate_simulation_and_measurement_s
     assert inference["accepted_diagnoses"] == 1 and inference["failed_diagnostic_attempts"] == 1
     assert inference["tool_executions"] == 1 and inference["simulation_steps"] == 1
     assert inference["usage_reported_calls"] == 1
-    assert data["measurements"] == {"instrumented": 1, "manual": 0, "simulated": 1}
+    assert data["measurements"] == {"instrumented": 1, "manual": 0, "simulated": 1, "serial_reported": 0}
     assert data["sessions"]["physical_verifications"] == 0 and data["queue"]["pending"] == 1
     assert sum(d["requests"] for d in data["daily"]) == 2
     assert len(data["recent_calls"]) == 2 and data["models"][0]["requests"] == 2

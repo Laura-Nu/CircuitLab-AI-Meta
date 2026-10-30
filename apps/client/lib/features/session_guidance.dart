@@ -60,6 +60,7 @@ String sessionSummaryKey(dynamic state) => switch (state) {
 class SessionGuidance extends StatelessWidget {
   final Map<String, dynamic> session;
   final bool busy, analyzing;
+  final VoidCallback? onBoard;
   final VoidCallback onSpec,
       onEvidence,
       onAnalyze,
@@ -77,6 +78,7 @@ class SessionGuidance extends StatelessWidget {
     required this.session,
     required this.busy,
     this.analyzing = false,
+    this.onBoard,
     required this.onSpec,
     required this.onEvidence,
     required this.onAnalyze,
@@ -181,7 +183,8 @@ class SessionGuidance extends StatelessWidget {
         if (state == 'awaiting_measurement' ||
             missing.isNotEmpty ||
             checks.isEmpty) {
-          button('recordMeasurement', onManual, Icons.speed_outlined);
+          if (onBoard != null) button('serialReadFromBoard', onBoard!, Icons.usb);
+          button('recordMeasurement', onManual, Icons.speed_outlined, filled: onBoard == null);
           final points = (session['specification']?['points'] as List? ?? []);
           if (points.any((p) => instrumentSupportsObservation(p as Map) &&
               (state != 'awaiting_measurement' || p['id'] == plan['point_id']))) {

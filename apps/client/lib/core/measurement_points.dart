@@ -50,3 +50,14 @@ bool booleanPoint(Map specification, dynamic pointId) =>
 bool instrumentSupportsObservation(Map point) =>
     point['kind'] != 'reported_state' &&
     const ['voltage', 'boolean'].contains(point['value_kind'] ?? 'voltage');
+
+/// Match explicit units and JSON types; a channel name never implies a unit.
+bool serialSupportsObservation(Map point, Map sample) {
+  final value = sample['value'], unit = sample['unit'];
+  return switch (point['value_kind'] ?? 'voltage') {
+    'boolean' => unit == 'boolean' && value is bool,
+    'text' => unit == 'text' && value is String,
+    'number' => unit == point['unit'] && value is num && value.isFinite,
+    _ => (unit == 'V' || unit == 'mV') && value is num && value.isFinite,
+  };
+}

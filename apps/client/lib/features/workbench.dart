@@ -89,6 +89,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
   bool refreshAgain = false, foreground = true;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  final boardDataKey = GlobalKey();
 
   @override
   void initState() {
@@ -1222,6 +1223,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onAnalyze: requestAnalysis,
           onConfirm: confirmConnection,
           onManual: measure,
+          onBoard: () {
+            final target = boardDataKey.currentContext;
+            if (target != null) Scrollable.ensureVisible(target, duration: const Duration(milliseconds: 250));
+          },
           onBridge: hardware,
           onIntervention: confirmIntervention,
           onFunctional: recordFunctionalCheck,
@@ -1231,23 +1236,25 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onNew: createSession,
         ),
         SizedBox(height: 20),
+        if (editable && !sessionFinished(state)) ...[
+          const SizedBox(height: 16),
+          Container(key: boardDataKey, child: SerialMonitor(
+            key: ValueKey('serial-${s['id']}'),
+            api: api,
+            sessionId: s['id'],
+            session: s,
+            canSave: !busy && !analyzing && !sessionFinished(state) &&
+              !(s['jobs'] as List? ?? []).any((job) => ['pending', 'running'].contains(job['status'])),
+            onSaved: () => refresh(),
+          )),
+        ],
+        SizedBox(height: 16),
         SessionResults(
           session: s,
           events: events,
           busy: busy,
           onReport: () => showReport(readable: true),
         ),
-        if (editable) ...[
-          const SizedBox(height: 16),
-          SerialMonitor(
-            key: ValueKey('serial-${s['id']}'),
-            api: api,
-            sessionId: s['id'],
-            canSave: !busy && !analyzing && !sessionFinished(state) &&
-              !(s['jobs'] as List? ?? []).any((job) => ['pending', 'running'].contains(job['status'])),
-            onSaved: () => refresh(),
-          ),
-        ],
         SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -1630,6 +1637,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'specification_confirmed': tr('schematicAndCriteriaConfirmed'),
         'evidence_added': tr('imageAttached'),
         'serial_captured': tr('serialCapturedEvent'),
+        'serial_reading_received': tr('serialReadingReceivedEvent'),
         'connection_confirmed': tr('connectionConfirmed'),
         'measurement_recorded': tr('measurementEvent', {
           'source': AppStrings.of(context).label(e['data']['source'] ?? ''),

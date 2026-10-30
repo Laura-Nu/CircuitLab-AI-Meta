@@ -566,7 +566,7 @@ class _MetricsPanelState extends State<MetricsPanel> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          ...['instrumented', 'manual', 'simulated'].map(
+                          ...['instrumented', 'serial_reported', 'manual', 'simulated'].map(
                             (source) => bar(
                               tr('metricsSource_$source'),
                               measurements[source] as num? ?? 0,

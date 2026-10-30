@@ -4,16 +4,17 @@ from app.i18n import label, safe_text
 LIMITATIONS = {
     "es": [
         "Solo familias y puntos confirmados; no acredita conexiones ocultas.",
-        "Las lecturas manuales y simuladas conservan su origen.",
+        "Las lecturas manuales, simuladas y comunicadas por la placa conservan su origen; la telemetría USB no es una medición calibrada.",
         "La verificación combina los criterios declarados de lecturas y datos con la prueba funcional registrada por la persona.",
     ],
     "en": [
         "Only confirmed circuit families and points; hidden connections are not established.",
-        "Manual and simulated readings retain their source labels.",
+        "Manual, simulated and board-reported readings retain their source labels; USB telemetry is not a calibrated measurement.",
         "Verification combines the declared reading and data criteria with the operator-recorded functional test.",
     ],
 }
 EVENTS = {
+    "serial_reading_received": ("Dato USB recibido de la placa", "USB board reading received"),
     "serial_captured": ("Captura serial guardada", "Serial capture saved"),
     "baseline_functional_check_recorded": ("Comprobación funcional sin reparación", "Functional check without repair"),
     "baseline_assessment_completed": ("Evaluación sin reparación finalizada", "Baseline assessment completed"),
@@ -51,7 +52,7 @@ def prepare_report(result, language):
     result["presentation"] = {
         "state": label(result["state"], language),
         "family": label(result["family"], language),
-        "sources": {source: label(source, language) for source in ("manual", "instrumented", "simulated")},
+        "sources": {source: label(source, language) for source in ("manual", "instrumented", "simulated", "serial_reported")},
         "original_content_notice": (
             "Los textos aportados por personas y los análisis históricos sin traducción conservan su idioma original."
             if language == "es"
@@ -185,6 +186,8 @@ def render_markdown(report, language, *, technical_details=False):
                 outcome = prediction["expected_outcome"][language]
                 lines.append(f"  H{prediction['hypothesis_index'] + 1}: {safe_text(outcome)}")
     lines += ["", f"## {text('Mediciones', 'Measurements')}"]
+    serial_provenance = {event["data"].get("measurement_id"): event["data"]
+                         for event in report["events"] if event["kind"] == "serial_reading_received"}
     for item in report["measurements"]:
         phase = (
             text("Posterior a intervención", "After intervention")
@@ -194,6 +197,13 @@ def render_markdown(report, language, *, technical_details=False):
         lines.append(
             f"- {item['point_id']}: {render_observation(item['value'], item.get('unit', 'V'))} · {label(item['source'], language)} · {phase} · {timestamp(item['measured_at'])} · {item['id']}"
         )
+        provenance = serial_provenance.get(item["id"])
+        if item["source"] == "serial_reported" and provenance:
+            fields = [f"{name}: {safe_text(provenance[key])}" for key, name in (
+                ("channel", text("canal", "channel")), ("sensor", "sensor"),
+                ("board", text("placa", "board")), ("label", text("nombre", "label")),
+            ) if provenance.get(key)]
+            lines.append(f"  {text('Declarado por el firmware', 'Declared by firmware')}: " + " · ".join(fields))
     lines += ["", f"## {text('Intervenciones', 'Interventions')}"]
     for item in report["interventions"]:
         lines.append(f"- {timestamp(item['created_at'])}: {safe_text(item['description'])}")
