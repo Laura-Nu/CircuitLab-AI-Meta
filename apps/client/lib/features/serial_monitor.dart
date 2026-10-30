@@ -237,6 +237,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
       const SizedBox(height: 8),
       Text(strings.t('serialChannelsHelp')),
       if (observations.isNotEmpty) ExpansionTile(
+        key: const PageStorageKey('serial-available-channels'),
         tilePadding: EdgeInsets.zero,
         title: Text(strings.t('serialAvailableChannels', {'count': observations.length})),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
@@ -294,6 +295,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
         style: TextStyle(color: Theme.of(context).colorScheme.primary),
       )),
       if (observations.isEmpty || observations.every((sample) => sample['invalid'] == true)) ExpansionTile(
+        key: const PageStorageKey('serial-format-help'),
         tilePadding: EdgeInsets.zero,
         title: Text(strings.t('serialFormatTitle')),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
@@ -301,7 +303,8 @@ class _SerialMonitorState extends State<SerialMonitor> {
           Text(strings.t('serialFormatHelp')),
           const SizedBox(height: 8),
           const SelectableText('{"circuitlab":1,"channel":"dht11.temperature",'
-              '"sensor":"DHT11","value":23.5,"unit":"°C"}'),
+              '"sensor":"DHT11","value":23.5,"unit":"°C"}',
+              key: PageStorageKey('serial-format-example')),
           const SizedBox(height: 12),
         ],
       ),
@@ -312,7 +315,8 @@ class _SerialMonitorState extends State<SerialMonitor> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return ExpansionTile(
-      key: const PageStorageKey('serial-monitor'),
+      // Expansion flags and scroll offsets must have distinct storage identifiers.
+      key: PageStorageKey('serial-monitor-${widget.sessionId}'),
       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
       title: Text(strings.t('serialMonitorTitle')),
       subtitle: Text(strings.t('serialMonitorSubtitle')),
@@ -361,7 +365,12 @@ class _SerialMonitorState extends State<SerialMonitor> {
             constraints: const BoxConstraints(maxHeight: 240),
             width: double.infinity,
             padding: const EdgeInsets.all(12),
-            child: SingleChildScrollView(child: SelectableText(lines.join('\n'))),
+            child: SingleChildScrollView(
+              key: const PageStorageKey('serial-output-scroll'),
+              primary: false,
+              child: SelectableText(lines.join('\n'),
+                key: const PageStorageKey('serial-output-text')),
+            ),
           ),
           if (dropped > 0) Text(strings.t('serialBufferLimit')),
           if (savedSequence > 0) Text(strings.t('serialSaved')),
