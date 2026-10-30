@@ -111,7 +111,11 @@ void main() {
       }
       await choose('measurementKindNumber');
       expect(find.byKey(const ValueKey('TP1-unit')), findsOneWidget);
-      expect(tester.widget<TextFormField>(find.byKey(const ValueKey('TP1-min'))).keyboardType?.signed, isTrue);
+      final minimumInput = find.descendant(
+        of: find.byKey(const ValueKey('TP1-min')),
+        matching: find.byType(TextField),
+      );
+      expect(tester.widget<TextField>(minimumInput).keyboardType.signed, isTrue);
       await choose('measurementKindText');
       expect(find.byKey(const ValueKey('TP1-expected-text')), findsOneWidget);
       expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
