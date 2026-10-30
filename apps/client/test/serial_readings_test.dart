@@ -86,7 +86,13 @@ Future<void> bindChannel(WidgetTester tester, String point, String channel) asyn
   await tester.ensureVisible(selector);
   await tester.tap(selector);
   await tester.pump(const Duration(milliseconds: 300));
-  await tester.tap(find.textContaining(channel).last);
+  final option = find.descendant(
+    of: find.byWidgetPredicate((widget) =>
+        widget is DropdownMenuItem<String> && widget.value == channel),
+    matching: find.textContaining(channel),
+  ).hitTestable();
+  expect(option, findsOneWidget);
+  await tester.tap(option);
   await tester.pump(const Duration(milliseconds: 300));
 }
 

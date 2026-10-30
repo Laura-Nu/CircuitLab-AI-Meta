@@ -145,28 +145,13 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
         },
       );
 
-  Widget rangeFields(_PointFields point) => LayoutBuilder(
-    builder: (context, constraints) {
-      final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      if (constraints.maxWidth / textScale < 360) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            voltageField(point, minimum: true),
-            const SizedBox(height: 10),
-            voltageField(point, minimum: false),
-          ],
-        );
-      }
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: voltageField(point, minimum: true)),
-          const SizedBox(width: 10),
-          Expanded(child: voltageField(point, minimum: false)),
-        ],
-      );
-    },
+  Widget rangeFields(_PointFields point) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      voltageField(point, minimum: true),
+      const SizedBox(height: 10),
+      voltageField(point, minimum: false),
+    ],
   );
 
   Widget pointFields(_PointFields point) => Padding(

@@ -65,7 +65,14 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
         working-directory: apps/client
-      - run: flutter analyze && flutter test && flutter build web --release --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1
+      - name: Analyze Flutter
+        run: flutter analyze
+        working-directory: apps/client
+      - name: Test Flutter
+        run: flutter test --reporter expanded
+        working-directory: apps/client
+      - name: Build Flutter web
+        run: flutter build web --release --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1
         working-directory: apps/client
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
