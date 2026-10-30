@@ -74,7 +74,10 @@ Future<void> renderMonitor(WidgetTester tester, CircuitApi api, TelemetryPort po
 }
 
 Future<void> connectMonitor(WidgetTester tester) async {
-  final button = find.widgetWithText(OutlinedButton, AppStrings('es').t('serialConnect'));
+  final button = find.ancestor(
+    of: find.text(AppStrings('es').t('serialConnect')),
+    matching: find.bySubtype<OutlinedButton>(),
+  );
   await tester.ensureVisible(button);
   await tester.tap(button);
   await tester.pump();

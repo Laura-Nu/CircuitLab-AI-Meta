@@ -217,12 +217,18 @@ void main() {
         ))));
         await tester.tap(find.text(strings.t('serialMonitorTitle')));
         await tester.pumpAndSettle();
-        final connect = find.widgetWithText(OutlinedButton, strings.t('serialConnect'));
+        final connect = find.ancestor(
+          of: find.text(strings.t('serialConnect')),
+          matching: find.bySubtype<OutlinedButton>(),
+        );
         await tester.ensureVisible(connect);
         await tester.tap(connect);
         await tester.pumpAndSettle();
         expect(serial.active, isTrue);
-        final save = find.widgetWithText(FilledButton, strings.t('serialSave'));
+        final save = find.ancestor(
+          of: find.text(strings.t('serialSave')),
+          matching: find.bySubtype<FilledButton>(),
+        );
         await tester.ensureVisible(save);
         expect(tester.getSize(save).width, lessThanOrEqualTo(layout.width));
         expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
