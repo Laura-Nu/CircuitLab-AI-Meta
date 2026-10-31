@@ -854,6 +854,7 @@ def report(
     db: DBSession = Depends(get_db),
     language=Depends(request_language),
     format: Literal["json", "markdown"] = Query(default="json"),
+    include_markdown: bool = Query(default=False),
 ):
     session = authorized(db, session_id, user)
     result = details(db, session)
@@ -866,9 +867,15 @@ def report(
     ]
     result = prepare_report(result, language)
     result["storyboards"] = stories.stories_for(db, session)
+    rendered = (
+        render_markdown(result, language, technical_details=user.role == "admin")
+        if include_markdown or format == "markdown" else None
+    )
+    if include_markdown:
+        result["markdown"] = rendered
     if format == "markdown":
         return Response(
-            render_markdown(result, language, technical_details=user.role == 'admin'),
+            rendered,
             media_type="text/markdown",
             headers={"Content-Language": language},
         )

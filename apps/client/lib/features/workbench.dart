@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
@@ -24,6 +23,8 @@ import 'specification_dialog.dart';
 import 'bridge_setup.dart';
 import 'session_guidance.dart';
 import 'session_results.dart';
+import 'session_report_dialog.dart';
+import 'diagnostic_summary.dart';
 import 'hardware_point_field.dart';
 import 'serial_monitor.dart';
 import '../core/number_format.dart';
@@ -1161,7 +1162,6 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final s = selected!;
     final state = s['state'];
     final editable = s['can_edit'] == true;
-    final plan = s['pending_test'] as Map?;
     final measurements = s['measurements'] as List;
     final analysisJobs = (s['jobs'] as List? ?? [])
         .where(
@@ -1232,7 +1232,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onFunctional: recordFunctionalCheck,
           onVerify: () => post('verification'),
           onBaseline: recordBaselineCheck,
-          onReport: () => showReport(readable: true),
+          onReport: showReport,
           onNew: createSession,
         ),
         SizedBox(height: 20),
@@ -1253,7 +1253,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
           session: s,
           events: events,
           busy: busy,
-          onReport: () => showReport(readable: true),
+          onReport: showReport,
         ),
         SizedBox(height: 16),
         Wrap(
@@ -1276,7 +1276,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
               OutlinedButton.icon(
                 onPressed: showReport,
                 icon: Icon(Icons.description_outlined, size: 17),
-                label: Text(tr('jsonReport')),
+                label: Text(tr('sessionReport')),
               ),
           ],
         ),
@@ -1415,64 +1415,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
           ],
         ),
         SizedBox(height: 16),
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              heading(
-                Icons.psychology_outlined,
-                tr('hypothesesAndObservations'),
-              ),
-              SizedBox(height: 14),
-              if (plan?['observations'] != null)
-                for (final o in localized(plan!, 'observations'))
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 10),
-                    child: Text('• $o', style: TextStyle(color: muted)),
-                  ),
-              if ((s['hypotheses'] as List).isEmpty)
-                Text(
-                  tr('theAnalysisWillAppearHereEveryConclusionMust'),
-                  style: TextStyle(color: muted),
-                ),
-              for (final h
-                  in (s['hypotheses'] as List)
-                      .where(
-                        (h) =>
-                            h['data']['analysis_step'] ==
-                            (s['analysis_steps'] ?? 0),
-                      )
-                      .toList()
-                      .reversed) ...[
-                Divider(),
-                Text(
-                  localized(h['data'], 'cause'),
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  tr('hypothesisStep', {
-                    'status': AppStrings.of(context).label(h['data']['status']),
-                    'step': h['data']['analysis_step'],
-                  }),
-                  style: TextStyle(color: mint, fontSize: 11),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  localized(h['data'], 'explanation'),
-                  style: TextStyle(color: muted),
-                ),
-                if (api.isAdmin)
-                  Text(
-                    tr('references', {
-                      'ids': (h['data']['evidence_ids'] as List).join(', '),
-                    }),
-                    style: TextStyle(color: muted, fontSize: 10),
-                  ),
-              ],
-            ],
-          ),
-        ),
+        DiagnosticSummary(session: s, technicalDetails: api.isAdmin),
         SizedBox(height: 18),
         box(
           Column(
@@ -2473,16 +2416,17 @@ class _WorkbenchState extends ConsumerState<Workbench>
     calibration.dispose();
   }
 
-  Future<void> showReport({bool readable = false}) => action(() async {
+  Future<void> showReport() => action(() async {
     final result = await api.request(
-      '/sessions/${selected!['id']}/report${readable ? '?format=markdown' : ''}',
+      '/sessions/${selected!['id']}/report?include_markdown=true',
     );
-    await showText(
-      tr('sessionReport'),
-      readable
-          ? result as String
-          : JsonEncoder.withIndent('  ').convert(result),
-      tr(readable ? 'reportDescription' : 'copyTheJsonToSaveOrExportThe'),
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => SessionReportDialog(
+        report: Map<String, dynamic>.from(result as Map),
+        technicalDetails: api.isAdmin,
+      ),
     );
   });
   Future<void> showText(String title, String content, String subtitle) async {

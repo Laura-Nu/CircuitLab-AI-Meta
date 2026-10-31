@@ -1746,6 +1746,16 @@
               "default": "json",
               "title": "Format"
             }
+          },
+          {
+            "name": "include_markdown",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Markdown"
+            }
           }
         ],
         "responses": {

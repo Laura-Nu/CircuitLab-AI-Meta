@@ -24,6 +24,10 @@ void main() {
           'pending_test': {
             'point_id': 'TP2',
             'instruction': 'Read the authorized supply point.',
+            'rationale': 'Untranslated rationale',
+            'translations': {
+              language: {'rationale': 'Reason for the selected observation'},
+            },
           },
           'specification': {},
           'completion': {},
@@ -74,6 +78,11 @@ void main() {
         expect(find.byType(CircularProgressIndicator), findsNothing);
         await tester.tap(find.text(strings.t('recordMeasurement')));
         expect(manual, 1);
+        await tester.ensureVisible(find.text(strings.t('whyThisStep')));
+        await tester.tap(find.text(strings.t('whyThisStep')));
+        await tester.pumpAndSettle();
+        expect(find.text('Reason for the selected observation').hitTestable(), findsOneWidget);
+        expect(find.text('Untranslated rationale'), findsNothing);
         session['state'] = 'awaiting_functional_check';
         session['completion'] = {'baseline_available': true};
         await show();

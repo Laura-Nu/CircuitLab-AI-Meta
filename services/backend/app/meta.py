@@ -7,7 +7,7 @@ from app.schemas import DiagnosisOutput
 from app.measurements import reading_passes
 from app.storage import LocalStorage
 
-PROMPT_VERSION = "circuitlab-11-serial-observations"
+PROMPT_VERSION = "circuitlab-12-focused-responses"
 SYSTEM = """You are CircuitLab AI, a low-voltage circuit diagnostic assistant.
 setup describes the actual board and modules, including Arduino, ESP32 and other controllers.
 For microcontroller/custom projects, reason about the declared components and interfaces;
@@ -86,13 +86,26 @@ Request another view or connection confirmation on remaining ambiguity; allow in
 Do not request powered resistance/continuity tests or signals outside 0-5 V.
 First call get_recorded_observations with no arguments. It reads only this investigation.
 After its result is returned, submit_diagnosis or equivalent JSON. Do not invent tool results.
-Simulated measurements are fixture data and cannot establish a physical repair. context.language sets the primary language.
+Simulated measurements are fixture data and cannot establish a physical repair.
+Within an explicitly synthetic scenario, still use suitable recorded fixture values for
+range comparisons and next-step selection; do not repeat a test solely because its
+source is simulated. Preserve that provenance and the need for a functional check.
+context.language sets the primary language.
 translations must be a nested JSON object, never a JSON-encoded string.
 test_predictions must be a native JSON array of objects, never a JSON-encoded string.
 Keep the response concise: at most 3 observations, usually 2-3 hypotheses, one short
 sentence per explanation and predicted outcome, and at most 2 sentences each for
 instruction and rationale. Do not repeat the full context or analytical examples.
 Preserve essential conditions, ambiguity and exact evidence references.
+Write for the operator: name the point by its confirmed label, using its TP ID only
+as a secondary reference. Instruction says exactly what to observe and under which
+condition; rationale explains why it matters and what remains uncertain. Keep protocol
+action names and internal procedure identifiers out of user-facing prose.
+For check_operation, state normal operation as a genuine alternative, not only faults.
+Previous hypotheses are past proposals, never new observations or proof.
+criterion_review summarizes recorded values against declared ranges, not function,
+calibration or repair verification. Resolve conflicts using timestamps and conditions;
+do not treat an older out-of-range value as the current value without explaining why.
 Always include translations.en and translations.es with equivalent observations,
 causes, explanations, instruction and rationale. Causes/explanations align in order
 and length with hypotheses. Preserve actions, references, units and conclusions.
@@ -271,6 +284,46 @@ def validate_predictions(result):
     ]
 
 
+def response_context(context):
+    """One authoritative copy of observations; retain every reading and its provenance."""
+    constraints = reasoning_constraints(context)
+    observation_fields = (
+        "session_id", "purpose", "specification", "measurements",
+        "connection_confirmations", "serial_captures", "serial_provenance",
+    )
+    observations = {field: context.get(field, []) for field in observation_fields}
+    observations.update(session_id=context.get("session_id"),
+                        purpose=context.get("purpose", "diagnosis"),
+                        specification=context.get("specification", {}))
+    observations.update(
+        physical_verification=False, reasoning_constraints=constraints,
+        notice="Recorded observations only. This tool does not acquire a new measurement.",
+    )
+    # Timestamp order, rather than upload order, determines the latest declared reading.
+    latest = {}
+    for reading in context.get("measurements", []):
+        stamp = (reading.get("measured_at") or 0, reading.get("created_at") or 0)
+        previous = latest.get(reading["point_id"])
+        if previous is None or stamp >= (previous.get("measured_at") or 0, previous.get("created_at") or 0):
+            latest[reading["point_id"]] = reading
+    observations["criterion_review"] = [
+        {"point_id": p["id"], "measurement_id": latest.get(p["id"], {}).get("id"),
+         "matches_criterion": reading_passes(p, latest[p["id"]]) if p["id"] in latest else None,
+         "meaning": "range_or_value_comparison_only"}
+        for p in context.get("specification", {}).get("points", [])
+    ]
+    brief = {k: v for k, v in context.items() if k not in observation_fields}
+    # Internal storage paths/hashes are unnecessary for visual reasoning.
+    brief["evidence"] = [{k: v for k, v in e.items() if k in {"id", "mime", "created_at"}}
+                         for e in context.get("evidence", [])]
+    history = context.get("previous_hypotheses", [])
+    if history:
+        latest_step = max(h.get("analysis_step", 0) for h in history)
+        brief["previous_hypotheses"] = [h for h in history if h.get("analysis_step", 0) == latest_step][-6:]
+    brief["recorded_context_source"] = "get_recorded_observations tool result"
+    return brief, observations
+
+
 def analyze(context, on_exchange=None):
     config = settings()
     if context.get("diagnosis_mode", config.ai_mode) != config.ai_mode:
@@ -280,9 +333,9 @@ def analyze(context, on_exchange=None):
     provider, base, image_limit = profile(config)
     if len(context["evidence"]) > image_limit:
         raise ValueError("Evidence exceeds the selected provider image limit")
-    constraints = reasoning_constraints(context)
-    grounded_context = {**context, "reasoning_constraints": constraints}
-    content = [{"type": "text", "text": json.dumps(grounded_context, ensure_ascii=False)}]
+    brief, recorded = response_context(context)
+    brief_text = json.dumps(brief, ensure_ascii=False, separators=(",", ":"))
+    content = [{"type": "text", "text": brief_text}]
     storage = LocalStorage()
     for evidence in context["evidence"]:
         encoded = base64.b64encode(storage.get(evidence["key"])).decode()
@@ -291,18 +344,7 @@ def analyze(context, on_exchange=None):
         )
     started = time.monotonic()
     def observations():
-        return {
-            "session_id": context.get("session_id"),
-            "purpose": context.get("purpose", "diagnosis"),
-            "specification": context.get("specification", {}),
-            "measurements": context.get("measurements", []),
-            "connection_confirmations": context.get("connection_confirmations", []),
-            "serial_captures": context.get("serial_captures", []),
-            "serial_provenance": context.get("serial_provenance", []),
-            "physical_verification": False,
-            "reasoning_constraints": constraints,
-            "notice": "Recorded observations only. This tool does not acquire a new measurement.",
-        }
+        return recorded
 
     raw, audit = invoke_agent(
         provider=provider, base=base, key=config.meta_api_key, model=config.meta_reasoning_model,
@@ -329,6 +371,8 @@ def analyze(context, on_exchange=None):
     shared_predictions = validate_predictions(result)
     return result, {
         **audit, "prompt_version": PROMPT_VERSION, "decoded_container_fields": decoded_fields,
+        "input_text_chars": len(brief_text) + len(json.dumps(recorded, ensure_ascii=False)),
+        "context_measurement_count": len(recorded["measurements"]),
         "shared_prediction_languages": shared_predictions,
         "duration_ms": round((time.monotonic() - started) * 1000),
         "input_evidence_ids": [e["id"] for e in context["evidence"]],

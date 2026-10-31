@@ -33,6 +33,10 @@ def test_readable_report_uses_viewer_role_for_model_details(
     url = f"{P}/sessions/{sid}/report?format=markdown"
     member = client.get(url, headers=auth)
     assert member.status_code == 200
+    snapshot = client.get(f"{P}/sessions/{sid}/report?include_markdown=true", headers=auth).json()
+    assert snapshot["markdown"] == member.text
+    assert snapshot["id"] == sid
+    assert "markdown" not in client.get(f"{P}/sessions/{sid}/report", headers=auth).json()
     assert "Known report observation" in member.text
     assert "Known proposed measurement" in member.text
     assert ("Known expected low input" if language == "en" else "Entrada baja prevista") in member.text
@@ -45,6 +49,8 @@ def test_readable_report_uses_viewer_role_for_model_details(
         db.commit()
     administrator = client.get(url, headers=auth)
     assert administrator.status_code == 200
+    snapshot = client.get(f"{P}/sessions/{sid}/report?include_markdown=true", headers=auth).json()
+    assert snapshot["markdown"] == administrator.text
     assert "Known report observation" in administrator.text
     assert "unit-test-provider" in administrator.text
     assert "unit-test-model" in administrator.text

@@ -14,7 +14,7 @@ The local preview runs in explicitly labeled simulation mode.
 - Explains the next useful measurement and the different outcomes predicted by each hypothesis.
 - Records manual, instrumented or board-reported serial readings, preserving their source and any instrument calibration identifier.
 - Keeps the human operator in control of physical changes and checks fresh readings against fixed criteria.
-- Exports an investigation as JSON or Markdown and supports authenticated, read-only reviewers.
+- Presents responsive session reports with typed observations, verification results and expandable history. Exports JSON or Markdown and supports authenticated, read-only reviewers.
 - Provides account administration, session revocation and password recovery through Resend.
 - Retains Android drafts and pending photos/measurements in a local SQLite outbox.
 - Optionally creates bilingual Circuit Story summaries linked to the investigation's source records.
@@ -176,6 +176,34 @@ and exact model ID.
 Set `AI_MODE=simulation` for the deterministic development fixture. It performs no
 model inference and labels its outputs as simulated. Changing the display language
 does not issue a new inference request: model responses retain both translations.
+
+### Response quality checks
+
+CircuitLab uses a hosted model; the application does not fine-tune its weights.
+Response optimization covers the prompt, grounded context, validation and presentation.
+Recorded observations are supplied once through the authorized tool result. A
+timestamp-based criterion review helps distinguish missing, out-of-range and newer
+in-range readings without claiming functional verification. The latest hypotheses
+are supplied as previous proposals; full history remains in PostgreSQL.
+
+Run the opt-in smoke check from a local checkout with configured Meta credentials:
+
+```bash
+cd services/backend
+uv run --env-file ../../.env python -m app.quality_check --live --output ../../.tools/validation/model-quality.json
+```
+
+This spends tokens on ten real provider exchanges across five explicitly synthetic
+cases: ambiguous low divider output, healthy readings, a firmware-reported boolean,
+an expected false value, and a newer reading superseding an older value. It validates
+the authorized tool cycle, structured output and expected next action; private receipts,
+responses, token usage and timings stay in the ignored output file. Choose a new output
+filename on each run. It does not modify application sessions or hardware.
+
+These are smoke checks, not a general accuracy benchmark, a training dataset or proof
+of physical repair. Review the explanations and bilingual equivalence manually, extend
+the cases to the actual boards, and validate final outcomes with real observations.
+Normal CI uses isolated fixtures and never calls the paid provider.
 
 ### Accounts and Resend
 

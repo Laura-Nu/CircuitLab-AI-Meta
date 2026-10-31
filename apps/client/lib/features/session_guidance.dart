@@ -332,6 +332,24 @@ class SessionGuidance extends StatelessWidget {
               style: TextStyle(color: tone, fontWeight: FontWeight.w600),
             ),
           ],
+          if (!terminal && !analyzing && plan['rationale'] != null) ...[
+            const SizedBox(height: 8),
+            ExpansionTile(
+              key: PageStorageKey('step-reason-${session['id']}-${session['analysis_steps']}'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(tr('whyThisStep')),
+              leading: const Icon(Icons.lightbulb_outline),
+              expandedAlignment: Alignment.centerLeft,
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (plan['translations'] as Map?)?[strings.language]?['rationale'] ??
+                      plan['rationale'],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ],
           if (finalizing) ...[
             const SizedBox(height: 16),
             const LinearProgressIndicator(),
