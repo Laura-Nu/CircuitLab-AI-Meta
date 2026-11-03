@@ -3148,7 +3148,7 @@
           },
           "functional_description": {
             "type": "string",
-            "maxLength": 1000,
+            "maxLength": 2000,
             "minLength": 5,
             "title": "Functional Description"
           }

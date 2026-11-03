@@ -14,8 +14,11 @@ class SerialMonitor extends StatefulWidget {
   final Future<void> Function() onSaved;
   final UsbSerialPort? serial;
   final Map<String, dynamic> session;
+  final ExpansibleController? expansionController;
+  final bool? initiallyExpanded;
   const SerialMonitor({super.key, required this.api, required this.sessionId,
-    required this.canSave, required this.onSaved, this.serial, this.session = const {}});
+    required this.canSave, required this.onSaved, this.serial, this.session = const {},
+    this.expansionController, this.initiallyExpanded});
   @override
   State<SerialMonitor> createState() => _SerialMonitorState();
 }
@@ -315,13 +318,14 @@ class _SerialMonitorState extends State<SerialMonitor> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return ExpansionTile(
+      controller: widget.expansionController,
       // Expansion flags and scroll offsets must have distinct storage identifiers.
       key: PageStorageKey('serial-monitor-${widget.sessionId}'),
       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
       title: Text(strings.t('serialMonitorTitle')),
       subtitle: Text(strings.t('serialMonitorSubtitle')),
       leading: const Icon(Icons.usb),
-      initiallyExpanded: widget.session.isNotEmpty,
+      initiallyExpanded: widget.initiallyExpanded ?? widget.session.isNotEmpty,
       childrenPadding: const EdgeInsets.only(bottom: 20),
       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

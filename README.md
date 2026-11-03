@@ -21,10 +21,10 @@ The local preview runs in explicitly labeled simulation mode.
 
 ## Investigation workflow
 
-1. Describe the intended behavior, observed symptoms and supply voltage.
-2. Confirm connections, operating conditions and up to 32 observations: voltage ranges, numeric sensor values with units, boolean states or exact text/codes.
+1. Describe the intended behavior once and select the supply: 5 V, 3.3 V, both rails or a custom voltage up to 5 V. Mixed supplies retain both declared rails in the project context.
+2. Review the connections and reused behavior description. Add common temperature, humidity, card-detection or GPS-fix checks, or define your own; confirm the expected criteria for up to 32 observations. Numeric ranges remain operator-defined.
 3. Attach circuit photographs and request analysis. The specification is frozen when analysis starts.
-4. Review competing explanations, predicted outcomes and the proposed measurement or clarification.
+4. Follow the current action. Findings, competing explanations, readings and history stay available in expandable sections.
 5. Confirm the measurement conditions and collect the requested reading: automatically from a linked board telemetry channel, manually, or with an instrument.
 6. Review the proposed intervention, disconnect power for wiring changes and confirm the action performed.
 7. Restore the operating conditions and collect fresh readings for every specified point.

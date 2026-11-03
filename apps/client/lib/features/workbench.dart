@@ -91,6 +91,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final boardDataKey = GlobalKey();
+  final boardExpansion = ExpansibleController();
 
   @override
   void initState() {
@@ -149,6 +150,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
 
   @override
   void dispose() {
+    boardExpansion.dispose();
     WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
     api.removeListener(authChanged);
@@ -1225,7 +1227,10 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onManual: measure,
           onBoard: () {
             final target = boardDataKey.currentContext;
-            if (target != null) Scrollable.ensureVisible(target, duration: const Duration(milliseconds: 250));
+            if (target != null) {
+              boardExpansion.expand();
+              Scrollable.ensureVisible(target, duration: const Duration(milliseconds: 250));
+            }
           },
           onBridge: hardware,
           onIntervention: confirmIntervention,
@@ -1243,6 +1248,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
             api: api,
             sessionId: s['id'],
             session: s,
+            expansionController: boardExpansion,
+            initiallyExpanded: false,
             canSave: !busy && !analyzing && !sessionFinished(state) &&
               !(s['jobs'] as List? ?? []).any((job) => ['pending', 'running'].contains(job['status'])),
             onSaved: () => refresh(),
@@ -1281,11 +1288,6 @@ class _WorkbenchState extends ConsumerState<Workbench>
           ],
         ),
         SizedBox(height: 24),
-        Text(
-          tr('originalContent'),
-          style: TextStyle(color: muted, fontSize: 11),
-        ),
-        SizedBox(height: 12),
         ExpansionTile(
           key: PageStorageKey('circuit-details-${s['id']}'),
           title: Text(tr('detailsAndEvidence')),
@@ -1417,97 +1419,100 @@ class _WorkbenchState extends ConsumerState<Workbench>
         SizedBox(height: 16),
         DiagnosticSummary(session: s, technicalDetails: api.isAdmin),
         SizedBox(height: 18),
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              heading(
-                Icons.monitor_heart_outlined,
-                tr('measurementsAndCriteria'),
-              ),
-              SizedBox(height: 16),
-              for (final p in (s['specification']['points'] ?? []))
-                Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    '${measurementPointName(s['specification'], p['id'], includeReference: api.isAdmin)} / ${AppStrings.of(context).criterion(p)}',
-                    style: TextStyle(color: muted),
-                  ),
-                ),
-              if (measurements.isEmpty)
-                Text(
-                  tr('noReadingsRecordedYet'),
-                  style: TextStyle(color: muted),
-                ),
-              for (final m in measurements.reversed)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Wrap(
-                    spacing: 20,
-                    runSpacing: 6,
-                    children: [
-                      Text(
-                        measurementPointName(
-                          s['specification'],
-                          m['point_id'],
-                          includeReference: api.isAdmin,
-                        ),
-                        style: TextStyle(
-                          color: mint,
-                          fontWeight: FontWeight.w600,
-                        ),
+        ExpansionTile(
+          key: PageStorageKey('measurements-${s['id']}'),
+          title: Text(tr('measurementsAndCriteria')),
+          leading: const Icon(Icons.monitor_heart_outlined),
+          tilePadding: EdgeInsets.zero,
+          children: [
+            box(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final p in (s['specification']['points'] ?? []))
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '${measurementPointName(s['specification'], p['id'], includeReference: api.isAdmin)} / ${AppStrings.of(context).criterion(p)}',
+                        style: TextStyle(color: muted),
                       ),
-                      Text(
-                        AppStrings.of(
-                          context,
-                        ).observation(m['value'], m['unit']),
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 18),
+                    ),
+                  if (measurements.isEmpty)
+                    Text(
+                      tr('noReadingsRecordedYet'),
+                      style: TextStyle(color: muted),
+                    ),
+                  for (final m in measurements.reversed)
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Wrap(
+                        spacing: 20,
+                        runSpacing: 6,
+                        children: [
+                          Text(
+                            measurementPointName(
+                              s['specification'],
+                              m['point_id'],
+                              includeReference: api.isAdmin,
+                            ),
+                            style: TextStyle(
+                              color: mint,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            AppStrings.of(
+                              context,
+                            ).observation(m['value'], m['unit']),
+                            style: TextStyle(fontFamily: 'monospace', fontSize: 18),
+                          ),
+                          badge(
+                            AppStrings.of(context).label(m['source']),
+                            m['source'] == 'simulated' ? Colors.amber : muted,
+                          ),
+                          Text(
+                            m['phase'] == 'verification'
+                                ? tr('afterIntervention')
+                                : tr('diagnosis'),
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ],
                       ),
-                      badge(
-                        AppStrings.of(context).label(m['source']),
-                        m['source'] == 'simulated' ? Colors.amber : muted,
+                    ),
+                  for (final v in s['verifications']) ...[
+                    Divider(),
+                    Text(
+                      v['data']['functional_check'] == null
+                          ? tr('legacyVoltageOnly')
+                          : v['data']['passed'] == true
+                          ? tr('theElectricalCriteriaAreMet')
+                          : tr('theFunctionalCriterionIsNotMet'),
+                      style: TextStyle(
+                        color: v['data']['passed'] == true ? mint : Colors.amber,
                       ),
+                    ),
+                    if (v['data']['functional_check'] != null) ...[
+                      Text(v['data']['functional_check']['observations'] ?? ''),
                       Text(
-                        m['phase'] == 'verification'
-                            ? tr('afterIntervention')
-                            : tr('diagnosis'),
-                        style: TextStyle(color: muted, fontSize: 12),
+                        tr('verificationSource', {
+                          'source': AppStrings.of(
+                            context,
+                          ).label(v['data']['verification_basis'] ?? 'manual'),
+                        }),
+                        style: TextStyle(color: muted),
                       ),
                     ],
-                  ),
-                ),
-              for (final v in s['verifications']) ...[
-                Divider(),
-                Text(
-                  v['data']['functional_check'] == null
-                      ? tr('legacyVoltageOnly')
-                      : v['data']['passed'] == true
-                      ? tr('theElectricalCriteriaAreMet')
-                      : tr('theFunctionalCriterionIsNotMet'),
-                  style: TextStyle(
-                    color: v['data']['passed'] == true ? mint : Colors.amber,
-                  ),
-                ),
-                if (v['data']['functional_check'] != null) ...[
-                  Text(v['data']['functional_check']['observations'] ?? ''),
-                  Text(
-                    tr('verificationSource', {
-                      'source': AppStrings.of(
-                        context,
-                      ).label(v['data']['verification_basis'] ?? 'manual'),
-                    }),
-                    style: TextStyle(color: muted),
-                  ),
+                    if (v['data']['physical_verification'] != true ||
+                        v['data']['functional_check'] == null)
+                      Text(
+                        tr('thisDoesNotEstablishFullPhysicalVerification'),
+                        style: TextStyle(color: Colors.amber),
+                      ),
+                  ],
                 ],
-                if (v['data']['physical_verification'] != true ||
-                    v['data']['functional_check'] == null)
-                  Text(
-                    tr('thisDoesNotEstablishFullPhysicalVerification'),
-                    style: TextStyle(color: Colors.amber),
-                  ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
         SizedBox(height: 18),
         ExpansionTile(
@@ -1746,6 +1751,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
     );
     String family = draft['family'] ?? 'microcontroller';
     String purpose = draft['purpose'] ?? 'diagnosis';
+    String? supplyMode = draft['supply_mode'] as String? ??
+        (supply.text.isEmpty ? null : ['3.3', '5'].contains(supply.text) ? supply.text : 'other');
     final accepted = await dialog(
       tr('newSession'),
       StatefulBuilder(
@@ -1792,20 +1799,39 @@ class _WorkbenchState extends ConsumerState<Workbench>
               onChanged: (v) => update(() => family = v!),
             ),
             const SizedBox(height: 12),
-            Text(tr('${family}Help')),
-            const SizedBox(height: 16),
             field(setup, tr('projectSetup'), lines: 2,
-              hint: tr('${family}SetupHint'), required: ['microcontroller', 'custom'].contains(family), maxLength: 2000),
+              hint: tr('${family}SetupHint'), required: ['microcontroller', 'custom'].contains(family),
+              maxLength: 2000 - (supplyMode == 'mixed' ? tr('supplyMixedDescription').length + 1 : 0)),
             const SizedBox(height: 16),
             field(title, tr('sessionName'), minLength: 3, maxLength: 120),
             SizedBox(height: 16),
-            field(
-              supply,
-              tr('supplyVoltageMaximum5V'),
-              numeric: true,
-              positive: true,
-              hint: tr('supplyChoiceHint'),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('session-supply'),
+              initialValue: supplyMode,
+              isExpanded: true, isDense: false, itemHeight: null,
+              decoration: InputDecoration(label: RequiredLabel(tr('supplyVoltageMaximum5V'))),
+              hint: Text(tr('supplySelect')),
+              items: [
+                for (final option in ['5', '3.3', 'mixed', 'other']) DropdownMenuItem(
+                  key: ValueKey('supply-option-$option'),
+                  value: option,
+                  child: Text(tr({'5': 'supplyFive', '3.3': 'supplyThree',
+                    'mixed': 'supplyMixed', 'other': 'supplyOther'}[option]!), maxLines: 2),
+                ),
+              ],
+              validator: (value) => value == null ? tr('supplySelect') : null,
+              onChanged: (value) => update(() {
+                supplyMode = value;
+                supply.text = value == 'mixed' ? '5' : value == 'other' ? '' : value!;
+              }),
             ),
+            if (supplyMode == 'mixed') Padding(
+              padding: const EdgeInsets.only(top: 8), child: Text(tr('supplyMixedHelp')),
+            ),
+            if (supplyMode == 'other') ...[
+              const SizedBox(height: 12),
+              field(supply, tr('supplyCustom'), numeric: true, positive: true, hint: '2.5'),
+            ],
             SizedBox(height: 16),
             field(expected, tr('whatShouldItDo'), lines: 3, minLength: 5,
               maxLength: 2000, hint: tr('${family}ExpectedHint')),
@@ -1823,11 +1849,6 @@ class _WorkbenchState extends ConsumerState<Workbench>
               maxLength: 2000,
               hint: tr(purpose == 'diagnosis' ? '${family}SymptomsHint' : 'optionalObservationHint'),
             ),
-            SizedBox(height: 12),
-            Text(
-              tr('theSchematicAndCriteriaAreConfirmedInThe'),
-              style: TextStyle(color: muted, fontSize: 12),
-            ),
           ],
         ),
       ),
@@ -1837,12 +1858,14 @@ class _WorkbenchState extends ConsumerState<Workbench>
       'title': title.text.trim(),
       'purpose': purpose,
       'family': family,
-      'setup': setup.text.trim(),
+      'setup': [setup.text.trim(), if (supplyMode == 'mixed') tr('supplyMixedDescription')]
+          .where((line) => line.isNotEmpty).join('\n'),
       'expected': expected.text.trim(),
       'symptoms': symptoms.text.trim(),
       'supply_v': double.tryParse(supply.text.replaceAll(',', '.')),
     };
-    await api.outbox.saveDraft(api.scope, data);
+    await api.outbox.saveDraft(api.scope, {...data, 'supply_mode': supplyMode,
+      'setup': setup.text.trim()});
     if (accepted == true) {
       await action(() async {
         final s = await api.request('/sessions', method: 'POST', data: data);
@@ -1866,12 +1889,16 @@ class _WorkbenchState extends ConsumerState<Workbench>
 
   Future<void> editSpec() async {
     final session = selected!;
+    final initial = Map<String, dynamic>.from(session['specification']);
+    if ((initial['functional_description'] as String? ?? '').trim().isEmpty) {
+      initial['functional_description'] = session['expected'];
+    }
     final specification = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => SpecificationDialog(
-        specification: Map<String, dynamic>.from(session['specification']),
+        specification: initial,
         supplyVoltage: (session['supply_v'] as num).toDouble(),
-        project: '${session['setup'] ?? ''}\n${session['expected']}',
+        project: session['setup'] ?? '',
       ),
     );
     if (specification == null || !mounted) return;
@@ -2578,6 +2605,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
       }
       if (required && value.length < minLength) {
         return tr('fieldMinimumCharacters', {'count': minLength});
+      }
+      if (maxLength != null && value.length > maxLength) {
+        return tr('fieldMaximumCharacters', {'count': maxLength});
       }
       return null;
     },

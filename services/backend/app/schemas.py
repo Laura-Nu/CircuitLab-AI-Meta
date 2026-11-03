@@ -116,7 +116,7 @@ class Specification(Strict):
     confirmed: Literal[True]
     connections: list[str] = Field(min_length=1, max_length=50)
     points: list[Point] = Field(min_length=1, max_length=32)
-    functional_description: str = Field(min_length=5, max_length=1000)
+    functional_description: str = Field(min_length=5, max_length=2000)
 
     @model_validator(mode="after")
     def unique(self):

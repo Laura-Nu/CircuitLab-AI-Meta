@@ -79,12 +79,6 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
   String? pointError;
 
   @override
-  void initState() {
-    super.initState();
-    if (points.isEmpty) points.add(_PointFields({'id': 'TP1'}));
-  }
-
-  @override
   void dispose() {
     connections.dispose();
     description.dispose();
@@ -104,14 +98,24 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
       point.minimum.text.trim().isEmpty &&
       point.maximum.text.trim().isEmpty;
 
-  void addPoint() {
+  void addPoint([Map<String, dynamic> template = const {}]) {
+    final empty = template.isEmpty ? null : points.where(unused).firstOrNull;
+    if (empty != null) {
+      setState(() {
+        points[points.indexOf(empty)] = _PointFields({...template, 'id': empty.id});
+        removedPoints.add(empty);
+        pointError = null;
+      });
+      return;
+    }
+    if (points.length >= maximumObservationPoints) return;
     final used = points.map((p) => p.id).toSet();
     final id = List.generate(
       99,
       (index) => 'TP${index + 1}',
     ).firstWhere((id) => !used.contains(id));
     setState(() {
-      points.add(_PointFields({'id': id}));
+      points.add(_PointFields({...template, 'id': id}));
       pointError = null;
     });
   }
@@ -151,6 +155,25 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
       voltageField(point, minimum: true),
       const SizedBox(height: 10),
       voltageField(point, minimum: false),
+    ],
+  );
+
+  Widget commonPoints() => Wrap(
+    spacing: 8, runSpacing: 8,
+    children: [
+      for (final preset in ['temperature', 'humidity', 'card', 'gps']) ActionChip(
+        key: ValueKey('preset-$preset'),
+        label: Text(tr('preset_$preset')),
+        onPressed: points.length < maximumObservationPoints || points.any(unused)
+            ? () => addPoint({
+                'label': tr('check_$preset'),
+                'kind': ['temperature', 'humidity'].contains(preset) ? 'numeric' : 'reported_state',
+                'value_kind': ['temperature', 'humidity'].contains(preset) ? 'number' : 'boolean',
+                if (preset == 'temperature') 'unit': '°C',
+                if (preset == 'humidity') 'unit': '%',
+                if (['card', 'gps'].contains(preset)) 'expected_state': true,
+              }) : null,
+      ),
     ],
   );
 
@@ -391,11 +414,11 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const RequiredFieldsNotice(),
-              if (widget.project.trim().isNotEmpty) ...[
-                Text(widget.project.trim(), style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 12),
-              ],
-              Text(tr('physicallyConfirmTheConnectionsDefineTheRangesThat')),
+              if (widget.project.trim().isNotEmpty) ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(tr('projectDetails')),
+                children: [Text(widget.project.trim()), const SizedBox(height: 12)],
+              ),
               example(),
               const SizedBox(height: 14),
               section('specificationWiringTitle', 'specificationWiringHelp'),
@@ -426,7 +449,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
                 controller: description,
                 minLines: 2,
                 maxLines: 5,
-                maxLength: 1000,
+                maxLength: 2000,
                 decoration: InputDecoration(
                   label: RequiredLabel(tr('functionalTestCondition')),
                   hintText: tr('specificationOperationPlaceholder'),
@@ -438,9 +461,7 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               ),
               const SizedBox(height: 22),
               section('specificationLocationsTitle', 'measurementPointHelp'),
-              Text(tr('specificationExpectedLimitsHelp')),
-              const SizedBox(height: 12),
-              Text(tr('testPointRequiredNotice')),
+              commonPoints(),
               const SizedBox(height: 12),
               for (final point in points) pointFields(point),
               OutlinedButton.icon(
@@ -451,8 +472,6 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               ),
               const SizedBox(height: 12),
               Text(tr('testPointLimit', {'count': '$maximumObservationPoints'})),
-              const SizedBox(height: 8),
-              Text(tr('leaveUnusedPointsEmptyAllDefinedPointsWill')),
               if (pointError != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),

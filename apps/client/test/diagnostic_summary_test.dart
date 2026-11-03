@@ -67,16 +67,23 @@ void main() {
           }
 
           await show();
-          expect(find.text('Visible observation'), findsOneWidget);
+          expect(find.text('Visible observation').hitTestable(), findsNothing);
+          await tester.tap(find.text(strings.t('recordedFindings')));
+          await tester.pumpAndSettle();
+          expect(find.text('Visible observation').hitTestable(), findsOneWidget);
           expect(find.text('Untranslated fallback'), findsNothing);
           expect(find.text('Obsolete cause'), findsNothing);
           expect(
             find.text(strings.t('hypothesesNotConclusions')),
             findsOneWidget,
           );
-          expect(find.text('Explanation 0').hitTestable(), findsOneWidget);
+          expect(find.text('Explanation 0').hitTestable(), findsNothing);
           expect(find.text('Explanation 1').hitTestable(), findsNothing);
           expect(find.textContaining('private-technical-id'), findsNothing);
+          await tester.ensureVisible(find.text('Cause 0'));
+          await tester.tap(find.text('Cause 0'));
+          await tester.pumpAndSettle();
+          expect(find.text('Explanation 0').hitTestable(), findsOneWidget);
           await tester.ensureVisible(find.text('Cause 1'));
           await tester.tap(find.text('Cause 1'));
           await tester.pumpAndSettle();

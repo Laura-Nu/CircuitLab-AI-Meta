@@ -70,7 +70,10 @@ void main() {
       ))));
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      expect(find.text('ESP32 + DHT11 + RFID + GPS'), findsOneWidget);
+      expect(find.text('ESP32 + DHT11 + RFID + GPS').hitTestable(), findsNothing);
+      await tester.tap(find.text(AppStrings(language).t('projectDetails')));
+      await tester.pumpAndSettle();
+      expect(find.text('ESP32 + DHT11 + RFID + GPS').hitTestable(), findsOneWidget);
       final submit = find.text(AppStrings(language).t('iConfirmTheSchematicAndCriteria'));
       await tester.ensureVisible(submit);
       await tester.tap(submit);
@@ -99,6 +102,11 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
       final selector = find.byKey(const ValueKey('TP1-kind'));
+      expect(selector, findsNothing);
+      final add = find.byKey(const ValueKey('add-test-point'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
       expect(tester.widget<DropdownButtonFormField<String>>(selector).initialValue, isNull);
       expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
       await tester.enterText(find.byKey(const ValueKey('TP1-label')), 'GPS valid fix');

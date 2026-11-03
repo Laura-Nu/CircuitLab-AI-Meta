@@ -131,6 +131,31 @@ void main() {
     expect(serialSupportsObservation({'min_v': 0, 'max_v': 5}, {'value': 3300, 'unit': 'mV'}), isTrue);
   });
 
+  testWidgets('USB details open on request without opening the port', (tester) async {
+    final api = CircuitApi()..access = 'synthetic-ui-fixture';
+    final port = TelemetryPort();
+    final expansion = ExpansibleController();
+    final strings = AppStrings('es');
+    await tester.pumpWidget(shell('es', Scaffold(body: SingleChildScrollView(
+      child: Column(children: [
+        TextButton(onPressed: expansion.expand, child: const Text('Use USB')),
+        SerialMonitor(api: api, sessionId: 'on-demand-fixture', session: pendingSession(),
+          canSave: true, onSaved: () async {}, serial: port,
+          expansionController: expansion, initiallyExpanded: false),
+      ]),
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text(strings.t('serialConnect')).hitTestable(), findsNothing);
+    await tester.tap(find.text('Use USB'));
+    await tester.pumpAndSettle();
+    expect(find.text(strings.t('serialConnect')).hitTestable(), findsOneWidget);
+    expect(port.active, isFalse);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    expansion.dispose();
+    api.dispose();
+  });
+
   testWidgets('Automatic USB records fresh zero and false once per requested check at mobile width', (tester) async {
     tester.view.physicalSize = const Size(320, 1100);
     tester.view.devicePixelRatio = 1;

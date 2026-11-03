@@ -26,6 +26,7 @@ class DiagnosticSummary extends StatelessWidget {
               h['data']['withdrawn_context'] != true,
         )
         .toList();
+    if (observations.isEmpty && hypotheses.isEmpty) return const SizedBox.shrink();
     return Card(
       key: const ValueKey('diagnostic-summary'),
       margin: EdgeInsets.zero,
@@ -47,27 +48,26 @@ class DiagnosticSummary extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            if (observations.isEmpty && hypotheses.isEmpty)
-              Text(strings.t('theAnalysisWillAppearHereEveryConclusionMust')),
-            if (observations.isNotEmpty) ...[
-              Text(
-                strings.t('recordedFindings'),
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              for (final observation in observations)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.notes_outlined, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(observation.toString())),
-                    ],
+            if (observations.isNotEmpty) ExpansionTile(
+              key: PageStorageKey('findings-${session['id']}-${session['analysis_steps']}'),
+              title: Text(strings.t('recordedFindings')),
+              tilePadding: EdgeInsets.zero,
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final observation in observations)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.notes_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(observation.toString())),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
             if (hypotheses.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -98,7 +98,6 @@ class DiagnosticSummary extends StatelessWidget {
                         left: 8,
                         right: 8,
                       ),
-                      initiallyExpanded: i == 0,
                       leading: Icon(
                         rejected
                             ? Icons.remove_circle_outline

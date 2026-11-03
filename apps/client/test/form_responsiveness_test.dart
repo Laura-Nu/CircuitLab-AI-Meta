@@ -133,13 +133,18 @@ void main() {
           for (final entry in {
             'sessionName': 'Guided check fixture',
             'projectSetup': 'ESP32 with temperature, RFID and GPS modules',
-            'supplyVoltageMaximum5V': '3.3',
             'whatShouldItDo': 'Output remains within the declared range',
           }.entries) {
             final field = find.widgetWithText(TextField, strings.t(entry.key));
             await tester.ensureVisible(field);
             await tester.enterText(field, entry.value);
           }
+          final supply = find.byKey(const ValueKey('session-supply'));
+          await tester.ensureVisible(supply);
+          await tester.tap(supply);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('supply-option-3.3')).hitTestable());
+          await tester.pumpAndSettle();
           tester.view.viewInsets = FakeViewPadding(bottom: layout.keyboard);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);

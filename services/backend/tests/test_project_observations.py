@@ -11,6 +11,21 @@ from app.worker import claim, process, snapshot
 P = "/api/v1"
 
 
+def test_expected_behavior_can_be_reused_without_truncating_the_session_description(client, headers, project):
+    description = ("Observe every installed module under the confirmed condition. " * 40)[:2000]
+    body = {
+        **project["specification"], "version": project["version"],
+        "confirmed": True, "functional_description": description,
+    }
+    response = client.patch(f"{P}/sessions/{project['id']}/specification", headers=headers, json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["specification"]["functional_description"] == description
+    invalid = client.patch(f"{P}/sessions/{project['id']}/specification", headers=headers, json={
+        **body, "version": response.json()["version"], "functional_description": description + "x",
+    })
+    assert invalid.status_code == 422
+
+
 @pytest.fixture
 def project(client, headers):
     created = client.post(P + "/sessions", headers=headers, json={
