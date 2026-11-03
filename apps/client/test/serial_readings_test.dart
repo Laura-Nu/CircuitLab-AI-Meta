@@ -133,9 +133,14 @@ void main() {
 
   testWidgets('A failed DHT read can be analyzed without inventing a temperature', (tester) async {
     final api = CircuitApi()..access = 'synthetic-error-fixture';
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      api.dispose();
+    });
     final port = TelemetryPort();
     port.lines.addAll(['ERROR: DHT11 sin lectura valida.', 'GPS: POSICION VALIDA', 'REGISTRO CANCELADO']);
     final paths = <String>[];
+    var saved = 0;
     api.dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
       paths.add(options.path);
       if (options.path.endsWith('/serial-captures')) {
@@ -147,20 +152,19 @@ void main() {
         handler.resolve(Response(requestOptions: options, statusCode: 202, data: {'job_id': 'review-error'}));
       }
     }));
-    await renderMonitor(tester, api, port, pendingSession(), () async {});
+    await renderMonitor(tester, api, port, pendingSession(), () async { saved++; });
     await connectMonitor(tester);
     expect(find.byKey(const ValueKey('serial-reported-errors')), findsOneWidget);
     expect(find.byKey(const ValueKey('serial-channel-TP1-null')), findsNothing);
     final analyze = find.byKey(const ValueKey('serial-analyze-messages'));
     await tester.ensureVisible(analyze);
+    expect(tester.widget<FilledButton>(analyze).onPressed, isNotNull);
     await tester.tap(analyze);
-    await tester.pump();
-    await tester.pump();
-    await tester.pump();
+    // Dio schedules interceptors on the event queue, beyond microtask-only pumps.
+    await pollMonitor(tester);
     expect(paths, ['/sessions/synthetic/serial-captures', '/sessions/synthetic/analysis']);
+    expect(saved, 1);
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-    api.dispose();
   });
 
   testWidgets('Shared board connection survives navigation and closes on sign out', (tester) async {
