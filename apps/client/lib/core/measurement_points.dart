@@ -61,3 +61,28 @@ bool serialSupportsObservation(Map point, Map sample) {
     _ => (unit == 'V' || unit == 'mV') && value is num && value.isFinite,
   };
 }
+
+/// Compare explicit types/units only. An unavailable comparison is not a pass.
+bool? observationMatchesCriterion(Map point, dynamic value, String unit) {
+  if (!serialSupportsObservation(point, {'value': value, 'unit': unit})) {
+    return null;
+  }
+  switch (point['value_kind'] ?? 'voltage') {
+    case 'boolean':
+      return point['expected_state'] is bool
+          ? value == point['expected_state'] : null;
+    case 'text':
+      return point['expected_text'] is String
+          ? value == point['expected_text'] : null;
+    default:
+      final numeric = point['value_kind'] == 'number';
+      final minimum = point[numeric ? 'min_value' : 'min_v'];
+      final maximum = point[numeric ? 'max_value' : 'max_v'];
+      if (minimum is! num || maximum is! num ||
+          !minimum.isFinite || !maximum.isFinite || minimum > maximum) {
+        return null;
+      }
+      final reading = !numeric && unit == 'mV' ? (value as num) / 1000 : value as num;
+      return reading >= minimum && reading <= maximum;
+  }
+}

@@ -32,10 +32,15 @@ class AppStrings {
       : unit == 'text' ? value.toString()
       : '${number(value as num)} $unit';
 
+  String pointObservation(Map point, dynamic value, [dynamic unit = 'V']) =>
+      unit == 'boolean' && point['kind'] == 'reported_state' && value is bool
+      ? t(value ? 'observationYes' : 'observationNo')
+      : observation(value, unit);
+
   String criterion(Map point) =>
       point['value_kind'] == 'boolean' || point['unit'] == 'boolean'
       ? t('expectedBooleanState', {
-          'state': booleanValue(point['expected_state']),
+          'state': pointObservation(point, point['expected_state'], 'boolean'),
         })
       : point['value_kind'] == 'text'
       ? t('expectedText', {'value': point['expected_text']})

@@ -154,6 +154,10 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text(strings.t('booleanFalse')).last);
           await tester.pumpAndSettle();
+          expect(find.byKey(const ValueKey('manual-criterion-feedback')), findsOneWidget);
+          expect(find.text(strings.t('observationWithinCriterion')), findsOneWidget);
+          expect(find.descendant(of: find.byType(AlertDialog),
+            matching: find.byType(DropdownButtonFormField<String>)), findsNothing);
           await tester.ensureVisible(find.byType(CheckboxListTile));
           await tester.tap(find.byType(CheckboxListTile));
           await tester.tap(find.text(strings.t('saveReading')));

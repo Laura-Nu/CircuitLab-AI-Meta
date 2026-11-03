@@ -38,6 +38,8 @@ void main() {
           'specification': {
             'points': [
               {'id': 'TP1', 'label': 'Supply'},
+              {'id': 'TP2', 'label': 'GPS fix', 'kind': 'reported_state',
+                'value_kind': 'boolean', 'expected_state': false},
             ],
           },
         };
@@ -117,6 +119,10 @@ void main() {
             'source': 'manual',
             'measured_at': 1,
           },
+          {
+            'point_id': 'TP2', 'value': false, 'unit': 'boolean',
+            'source': 'serial_reported', 'measured_at': 2,
+          },
         ];
         await render([
           request,
@@ -137,6 +143,15 @@ void main() {
         );
         expect(find.text(strings.t('hardwareReadSaved')), findsOneWidget);
         expect(find.textContaining('5.000'), findsNothing);
+        final savedValues = find.text(strings.t('observationSavedByPoint'));
+        await tester.ensureVisible(savedValues);
+        await tester.tap(savedValues);
+        await tester.pumpAndSettle();
+        expect(find.text('5 V'), findsOneWidget);
+        expect(find.text('2,5 V'), findsNothing);
+        expect(find.text('2.5 V'), findsNothing);
+        expect(find.text(strings.t('observationNo')), findsOneWidget);
+        expect(find.text(strings.label('serial_reported')), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });

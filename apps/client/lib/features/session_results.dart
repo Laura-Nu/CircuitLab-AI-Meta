@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/measurement_points.dart';
 import '../l10n/app_strings.dart';
+import 'observation_readout.dart';
 
 /// Uses persisted session facts; an open USB port alone is not a measurement.
 class SessionResults extends StatelessWidget {
@@ -48,6 +49,15 @@ class SessionResults extends StatelessWidget {
                 ? a
                 : b,
           );
+    final latestByPoint = <String, Map>{};
+    for (final reading in readings.cast<Map>()) {
+      final id = '${reading['point_id']}';
+      if (!latestByPoint.containsKey(id) ||
+          (reading['measured_at'] as num? ?? 0) >=
+              (latestByPoint[id]!['measured_at'] as num? ?? 0)) {
+        latestByPoint[id] = reading;
+      }
+    }
     return Card(
       key: const ValueKey('sessionResults'),
       margin: EdgeInsets.zero,
@@ -90,12 +100,25 @@ class SessionResults extends StatelessWidget {
                       specification,
                       latest['point_id'],
                     ),
-                    'value': latest['unit'] == 'boolean'
-                        ? strings.booleanValue(latest['value'])
-                        : strings.observation(latest['value'], latest['unit'] ?? 'V'),
+                    'value': strings.pointObservation(
+                      measurementPoint(specification, latest['point_id']),
+                      latest['value'], latest['unit'] ?? 'V'),
                     'source': strings.label(latest['source']),
                   },
                 ),
+              ),
+              ExpansionTile(
+                key: PageStorageKey('saved-observations-${session['id']}'),
+                tilePadding: EdgeInsets.zero,
+                title: Text(strings.t('observationSavedByPoint')),
+                expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [for (final reading in latestByPoint.values)
+                  ObservationReadout(
+                    title: measurementPointName(specification, reading['point_id']),
+                    observation: reading,
+                    point: measurementPoint(specification, reading['point_id']),
+                  ),
+                ],
               ),
             ] else ...[
               const SizedBox(height: 8),

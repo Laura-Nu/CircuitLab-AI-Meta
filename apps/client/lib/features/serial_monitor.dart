@@ -5,6 +5,7 @@ import '../core/networking/api.dart';
 import '../core/measurement_points.dart';
 import '../core/usb_serial.dart';
 import '../l10n/app_strings.dart';
+import 'observation_readout.dart';
 
 /// Board-reported data stays separate from the calibrated ADC/GPIO instrument.
 class SerialMonitor extends StatefulWidget {
@@ -241,14 +242,22 @@ class _SerialMonitorState extends State<SerialMonitor> {
       Text(strings.t('serialChannelsHelp')),
       if (observations.isNotEmpty) ExpansionTile(
         key: const PageStorageKey('serial-available-channels'),
+        initiallyExpanded: true,
         tilePadding: EdgeInsets.zero,
         title: Text(strings.t('serialAvailableChannels', {'count': observations.length})),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [for (final sample in observations) Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text('${sample['sensor'] ?? sample['board'] ?? ''} ${sample['channel']} · '
-              '${sample['invalid'] == true ? strings.t('serialInvalidValue') : sampleValue(sample)}'.trim()),
-        )],
+        children: [for (final sample in observations) Builder(builder: (_) {
+          final linked = points.where((point) => bindings[point['id']] == sample['channel']).toList();
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final point in linked.isEmpty ? <Map>[{}] : linked)
+              ObservationReadout(
+                key: ValueKey('serial-reading-${sample['channel']}-${point['id'] ?? ''}'),
+                title: '${point['label'] ?? sample['label'] ?? sample['channel']}',
+                observation: sample, point: point, live: true,
+              ),
+            const Divider(height: 1),
+          ]);
+        })],
       ),
       if (observations.any((sample) => sample['invalid'] == true)) Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -365,16 +374,22 @@ class _SerialMonitorState extends State<SerialMonitor> {
           if (connected) automaticReadings(strings),
           if (lines.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(strings.t('serialWaiting')))
-          else Container(
-            constraints: const BoxConstraints(maxHeight: 240),
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            child: SingleChildScrollView(
-              key: const PageStorageKey('serial-output-scroll'),
-              primary: false,
-              child: SelectableText(lines.join('\n'),
-                key: const PageStorageKey('serial-output-text')),
-            ),
+          else ExpansionTile(
+            key: const PageStorageKey('serial-raw-messages'),
+            tilePadding: EdgeInsets.zero,
+            title: Text(strings.t('serialRawMessages', {'count': lines.length})),
+            subtitle: Text(strings.t('serialRawMessagesHelp')),
+            children: [Container(
+              constraints: const BoxConstraints(maxHeight: 240),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              child: SingleChildScrollView(
+                key: const PageStorageKey('serial-output-scroll'),
+                primary: false,
+                child: SelectableText(lines.join('\n'),
+                  key: const PageStorageKey('serial-output-text')),
+              ),
+            )],
           ),
           if (dropped > 0) Text(strings.t('serialBufferLimit')),
           if (savedSequence > 0) Text(strings.t('serialSaved')),

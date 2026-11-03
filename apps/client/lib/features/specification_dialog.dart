@@ -240,6 +240,17 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               ],
               validator: (value) => !unused(point) && value == null ? tr('observationChooseType') : null,
               onChanged: (value) => setState(() {
+                final previousType = point.isBoolean ? 'boolean' : point.isNumber
+                    ? 'number' : point.isText ? 'text' : 'voltage';
+                final nextType = ['digital_state', 'reported_state'].contains(value)
+                    ? 'boolean' : value == 'numeric' ? 'number' : value == 'text' ? 'text' : 'voltage';
+                if (previousType != nextType) {
+                  point.minimum.clear();
+                  point.maximum.clear();
+                  point.unit.clear();
+                  point.expectedText.clear();
+                  point.expectedState = null;
+                }
                 if (value != 'custom' || !['supply', 'sensor_signal', 'dc_output'].contains(point.kind)) {
                   point.kind = value!;
                 }

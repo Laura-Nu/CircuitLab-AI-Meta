@@ -119,6 +119,9 @@ void main() {
       }
       await choose('measurementKindNumber');
       expect(find.byKey(const ValueKey('TP1-unit')), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('TP1-min')), '4');
+      await tester.enterText(find.byKey(const ValueKey('TP1-max')), '5');
+      await tester.enterText(find.byKey(const ValueKey('TP1-unit')), '°C');
       final minimumInput = find.descendant(
         of: find.byKey(const ValueKey('TP1-min')),
         matching: find.byType(TextField),
@@ -130,6 +133,8 @@ void main() {
       await choose('observationVoltageType');
       expect(find.byKey(const ValueKey('TP1-min')), findsOneWidget);
       expect(find.byKey(const ValueKey('TP1-unit')), findsNothing);
+      expect(tester.widget<TextFormField>(find.byKey(const ValueKey('TP1-min'))).controller!.text, isEmpty);
+      expect(tester.widget<TextFormField>(find.byKey(const ValueKey('TP1-max'))).controller!.text, isEmpty);
       await choose('measurementKindReportedState');
       expect(find.byKey(const ValueKey('TP1-min')), findsNothing);
       final state = find.byKey(const ValueKey('TP1-expected-state'));

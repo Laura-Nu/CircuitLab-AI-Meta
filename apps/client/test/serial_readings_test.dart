@@ -131,6 +131,38 @@ void main() {
     expect(serialSupportsObservation({'min_v': 0, 'max_v': 5}, {'value': 3300, 'unit': 'mV'}), isTrue);
   });
 
+  testWidgets('USB values are visible, linked criteria update, and raw messages stay optional', (tester) async {
+    tester.view.physicalSize = const Size(320, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = CircuitApi()..access = 'synthetic-ui-fixture';
+    final port = TelemetryPort()..emit('dht11.temperature', 23.5, '°C');
+    final strings = AppStrings('es');
+    await renderMonitor(tester, api, port, pendingSession(), () async {});
+    await connectMonitor(tester);
+    final readout = find.byKey(const ValueKey('serial-reading-dht11.temperature-'));
+    await tester.ensureVisible(readout);
+    expect(find.descendant(of: readout, matching: find.text('23,5 °C')), findsOneWidget);
+    expect(find.descendant(of: readout, matching: find.text(strings.t('observationNotLinked'))), findsOneWidget);
+    expect(find.byKey(const PageStorageKey('serial-output-text')), findsNothing);
+    await bindChannel(tester, 'TP1', 'dht11.temperature');
+    final linked = find.byKey(const ValueKey('serial-reading-dht11.temperature-TP1'));
+    await tester.ensureVisible(linked);
+    expect(find.descendant(of: linked, matching: find.text('Temperature')), findsOneWidget);
+    expect(find.descendant(of: linked, matching: find.text(strings.t('observationWithinCriterion'))), findsOneWidget);
+    final raw = find.byKey(const PageStorageKey('serial-raw-messages'));
+    final rawTitle = find.descendant(of: raw,
+      matching: find.text(strings.t('serialRawMessages', {'count': 1})));
+    await tester.ensureVisible(rawTitle);
+    await tester.tap(rawTitle);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const PageStorageKey('serial-output-text')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
   testWidgets('USB details open on request without opening the port', (tester) async {
     final api = CircuitApi()..access = 'synthetic-ui-fixture';
     final port = TelemetryPort();

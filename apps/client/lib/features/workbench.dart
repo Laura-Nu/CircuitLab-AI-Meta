@@ -1463,7 +1463,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
                           Text(
                             AppStrings.of(
                               context,
-                            ).observation(m['value'], m['unit']),
+                            ).pointObservation(
+                              measurementPoint(s['specification'], m['point_id']),
+                              m['value'], m['unit']),
                             style: TextStyle(fontFamily: 'monospace', fontSize: 18),
                           ),
                           badge(
@@ -1962,8 +1964,12 @@ class _WorkbenchState extends ConsumerState<Workbench>
       StatefulBuilder(
         builder: (_, update) => Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButtonFormField<String>(
+            if (s['state'] == 'awaiting_measurement')
+              Text(measurementPointName(s['specification'], point),
+                style: Theme.of(context).textTheme.titleLarge)
+            else DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: point,
               isDense: false,
@@ -1981,18 +1987,32 @@ class _WorkbenchState extends ConsumerState<Workbench>
                     ),
                   ),
               ],
-              onChanged: s['state'] == 'awaiting_measurement'
-                  ? null
-                  : (p) => update(() {
+              onChanged: (p) => update(() {
                       point = p!;
                       value.clear();
                       observedState = null;
                     }),
             ),
+            const SizedBox(height: 8),
+            Text(tr(digital() ? criterion()['kind'] == 'reported_state'
+                ? 'measurementKindReportedState' : 'measurementKindDigital'
+                : textReading() ? 'measurementKindText'
+                : sensorReading() ? 'measurementKindNumber' : 'observationVoltageType'),
+              style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             Text(tr('observationExpectedCriterion', {
               'criterion': AppStrings.of(context).criterion(criterion()),
             })),
+            ExpansionTile(
+              key: ValueKey('manual-observation-type-help-$point'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(tr('observationConfigurationTitle'),
+                style: Theme.of(context).textTheme.bodySmall),
+              children: [Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(tr('observationConfigurationHelp')),
+              )],
+            ),
             const SizedBox(height: 8),
             Text(tr('observationActualHelp')),
             SizedBox(height: 16),
@@ -2022,10 +2042,25 @@ class _WorkbenchState extends ConsumerState<Workbench>
               field(value, textReading() ? tr('observedText') : sensorReading()
                 ? tr('readingWithUnit', {'unit': criterion()['unit']}) : tr('readingInV05'),
                 numeric: !textReading(), voltageOnly: !sensorReading(),
+                onChanged: (_) => update(() {}),
                 maxLength: textReading() ? 500 : null),
+            Builder(builder: (_) {
+              final observed = digital() ? observedState : textReading() ? value.text.trim()
+                  : double.tryParse(value.text.trim().replaceAll(',', '.'));
+              final matches = observationMatchesCriterion(criterion(), observed,
+                  digital() ? 'boolean' : textReading() ? 'text' : sensorReading() ? criterion()['unit'] : 'V');
+              return matches == null || (textReading() && value.text.trim().isEmpty)
+                  ? const SizedBox.shrink() : Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(tr(matches ? 'observationWithinCriterion' : 'observationOutsideCriterion'),
+                      key: const ValueKey('manual-criterion-feedback'),
+                      style: TextStyle(color: matches ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.error)),
+                  );
+            }),
             SizedBox(height: 16),
             CheckboxListTile(
-              subtitle: Text(tr('requiredField')),
+              controlAffinity: ListTileControlAffinity.leading,
               value: confirmed,
               onChanged: (v) => update(() => confirmed = v!),
               contentPadding: EdgeInsets.zero,
@@ -2574,9 +2609,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
     int? maxLength,
     String? hint,
     bool voltageOnly = true,
+    ValueChanged<String>? onChanged,
   }) => TextFormField(
     key: ValueKey((controller, required)),
     controller: controller,
+    onChanged: onChanged,
     maxLines: lines,
     maxLength: maxLength,
     keyboardType: numeric

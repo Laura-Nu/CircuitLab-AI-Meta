@@ -382,7 +382,7 @@ class SessionGuidance extends StatelessWidget {
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        '${measurementPointName(session['specification'] as Map? ?? {}, check['point_id'])} — ${check['value'] == null ? tr('readingStillNeeded') : strings.observation(check['value'], check['unit'])}',
+                        '${measurementPointName(session['specification'] as Map? ?? {}, check['point_id'])} — ${check['value'] == null ? tr('readingStillNeeded') : strings.pointObservation(measurementPoint(session['specification'] as Map? ?? {}, check['point_id']), check['value'], check['unit'])}',
                       ),
                     ),
                   ],
