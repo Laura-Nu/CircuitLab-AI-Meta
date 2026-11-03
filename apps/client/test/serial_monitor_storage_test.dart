@@ -66,10 +66,12 @@ void main() {
         final channels = strings.t('serialAvailableChannels', {'count': 1});
         await toggle(channels);
         await toggle(channels);
-        final console = find.byWidgetPredicate(
-          (widget) =>
-              widget is SingleChildScrollView && widget.child is SelectableText,
-        );
+        final console = find.byKey(const PageStorageKey('serial-output-scroll'));
+        final messages = strings.t('serialRawMessages', {
+          'count': port.lines.length,
+        });
+        expect(console, findsNothing);
+        await toggle(messages);
         expect(console, findsOneWidget);
         await tester.ensureVisible(console);
         await tester.drag(console, const Offset(0, -150));
@@ -83,6 +85,11 @@ void main() {
             .position;
         final previous = position().pixels;
         expect(previous, greaterThan(0));
+        await toggle(messages);
+        expect(console, findsNothing);
+        await toggle(messages);
+        expect(console, findsOneWidget);
+        expect(position().pixels, closeTo(previous, 1));
         await toggle(strings.t('serialMonitorTitle'));
         expect(console, findsNothing);
         await toggle(strings.t('serialMonitorTitle'));

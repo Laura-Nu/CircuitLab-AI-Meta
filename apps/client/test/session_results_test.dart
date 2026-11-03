@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:circuitlab_client/core/number_format.dart';
 import 'package:circuitlab_client/features/session_results.dart';
+import 'package:circuitlab_client/features/observation_readout.dart';
 import 'package:circuitlab_client/features/hardware_point_field.dart';
 import 'package:circuitlab_client/l10n/app_strings.dart';
 import 'evidence_specification_test.dart' show shell;
@@ -150,8 +151,27 @@ void main() {
         expect(find.text('5 V'), findsOneWidget);
         expect(find.text('2,5 V'), findsNothing);
         expect(find.text('2.5 V'), findsNothing);
-        expect(find.text(strings.t('observationNo')), findsOneWidget);
-        expect(find.text(strings.label('serial_reported')), findsOneWidget);
+        final gpsReading = find.byWidgetPredicate(
+          (widget) =>
+              widget is ObservationReadout &&
+              widget.observation['point_id'] == 'TP2',
+        );
+        expect(gpsReading, findsOneWidget);
+        expect(
+          find.descendant(
+            of: gpsReading,
+            matching: find.text(strings.t('observationNo')),
+          ),
+          findsOneWidget,
+        );
+        // The source shares its line with the localized date and time.
+        expect(
+          find.descendant(
+            of: gpsReading,
+            matching: find.textContaining(strings.label('serial_reported')),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });
