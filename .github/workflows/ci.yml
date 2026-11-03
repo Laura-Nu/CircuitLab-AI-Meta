@@ -69,7 +69,9 @@ jobs:
         run: flutter analyze
         working-directory: apps/client
       - name: Test Flutter
-        run: flutter test --reporter expanded
+        run: |
+          git log -1 --format='Tested commit: %H %s'
+          flutter test --reporter expanded
         working-directory: apps/client
       - name: Build Flutter web
         run: flutter build web --release --base-href /app/ --no-web-resources-cdn --dart-define=API_BASE_URL=/api/v1

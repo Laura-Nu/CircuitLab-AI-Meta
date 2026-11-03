@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,25 @@ class TelemetryPort extends UsbSerialPort {
   };
   @override
   Future<void> disconnect() async { closeCount++; active = false; }
+}
+
+/// Explicit acknowledgements keep this widget check independent of Dio timers.
+class CaptureAnalysisApi extends CircuitApi {
+  final capture = Completer<Map<String, dynamic>>();
+  final analysis = Completer<Map<String, dynamic>>();
+  final calls = <({String path, String method, Map data})>[];
+
+  @override
+  Future<dynamic> request(String path, {String method = 'GET', dynamic data}) {
+    calls.add((path: path, method: method, data: Map<String, dynamic>.from(data as Map)));
+    if (method == 'POST' && path == '/sessions/synthetic/serial-captures') {
+      return capture.future;
+    }
+    if (method == 'POST' && path == '/sessions/synthetic/analysis') {
+      return analysis.future;
+    }
+    throw StateError('Unexpected request in capture/analysis fixture: $method $path');
+  }
 }
 
 Map<String, dynamic> pendingSession({String point = 'TP1', int step = 1}) => {
@@ -132,37 +152,41 @@ void main() {
   });
 
   testWidgets('A failed DHT read can be analyzed without inventing a temperature', (tester) async {
-    final api = CircuitApi()..access = 'synthetic-error-fixture';
+    final api = CaptureAnalysisApi()..access = 'synthetic-error-fixture';
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       api.dispose();
     });
     final port = TelemetryPort();
     port.lines.addAll(['ERROR: DHT11 sin lectura valida.', 'GPS: POSICION VALIDA', 'REGISTRO CANCELADO']);
-    final paths = <String>[];
     var saved = 0;
-    api.dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
-      paths.add(options.path);
-      if (options.path.endsWith('/serial-captures')) {
-        expect((options.data as Map)['lines'], contains('ERROR: DHT11 sin lectura valida.'));
-        handler.resolve(Response(requestOptions: options, statusCode: 201, data: {'id': 'actual-error-log'}));
-      } else {
-        expect(options.path, '/sessions/synthetic/analysis');
-        expect(options.data, {'evidence_id': 'actual-error-log'});
-        handler.resolve(Response(requestOptions: options, statusCode: 202, data: {'job_id': 'review-error'}));
-      }
-    }));
     await renderMonitor(tester, api, port, pendingSession(), () async { saved++; });
     await connectMonitor(tester);
     expect(find.byKey(const ValueKey('serial-reported-errors')), findsOneWidget);
     expect(find.byKey(const ValueKey('serial-channel-TP1-null')), findsNothing);
     final analyze = find.byKey(const ValueKey('serial-analyze-messages'));
     await tester.ensureVisible(analyze);
+    await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(analyze).onPressed, isNotNull);
-    await tester.tap(analyze);
-    // Dio schedules interceptors on the event queue, beyond microtask-only pumps.
-    await pollMonitor(tester);
-    expect(paths, ['/sessions/synthetic/serial-captures', '/sessions/synthetic/analysis']);
+    await tester.tap(analyze, warnIfMissed: true);
+    await tester.pump();
+    expect(api.calls, hasLength(1));
+    expect(api.calls.single.path, '/sessions/synthetic/serial-captures');
+    expect(api.calls.single.method, 'POST');
+    expect(api.calls.single.data['lines'], contains('ERROR: DHT11 sin lectura valida.'));
+    expect(api.calls.single.data.containsKey('value'), isFalse);
+    expect(saved, 0);
+
+    api.capture.complete({'id': 'actual-error-log'});
+    await tester.pump();
+    expect(api.calls.map((call) => call.path).toList(),
+      ['/sessions/synthetic/serial-captures', '/sessions/synthetic/analysis']);
+    expect(api.calls.last.method, 'POST');
+    expect(api.calls.last.data, {'evidence_id': 'actual-error-log'});
+    expect(saved, 0);
+
+    api.analysis.complete({'job_id': 'review-error'});
+    await tester.pump();
     expect(saved, 1);
     expect(tester.takeException(), isNull);
   });
