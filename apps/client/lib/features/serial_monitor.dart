@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../core/networking/api.dart';
 import '../core/measurement_points.dart';
+import '../core/serial_log.dart';
 import '../core/usb_serial.dart';
 import '../l10n/app_strings.dart';
 import 'observation_readout.dart';
@@ -17,9 +18,12 @@ class SerialMonitor extends StatefulWidget {
   final Map<String, dynamic> session;
   final ExpansibleController? expansionController;
   final bool? initiallyExpanded;
+  final bool maintainConnection;
+  final VoidCallback? onProgram;
   const SerialMonitor({super.key, required this.api, required this.sessionId,
     required this.canSave, required this.onSaved, this.serial, this.session = const {},
-    this.expansionController, this.initiallyExpanded});
+    this.expansionController, this.initiallyExpanded, this.maintainConnection = false,
+    this.onProgram});
   @override
   State<SerialMonitor> createState() => _SerialMonitorState();
 }
@@ -67,8 +71,9 @@ class _SerialMonitorState extends State<SerialMonitor> {
     if (oldWidget.sessionId != widget.sessionId) {
       automatic = false;
       bindings.clear(); submitted.clear(); observations = []; lines = []; waitingVersion = null;
+      captureId = null; captureLines = null; savedSequence = 0;
       pendingReading = null;
-      if (connected || connecting) unawaited(disconnect());
+      if (!widget.maintainConnection && (connected || connecting)) unawaited(disconnect());
     }
     if (requestKey(oldWidget.session) != requestKey(widget.session)) {
       // A buffered sample from the previous request must never answer a new test.
@@ -86,6 +91,12 @@ class _SerialMonitorState extends State<SerialMonitor> {
   void initState() {
     super.initState();
     widget.api.addListener(authChanged);
+    if (widget.maintainConnection && port.monitorSnapshot()['connected'] == true) {
+      baudRate = (port.monitorSnapshot()['baud_rate'] as num?)?.toInt() ?? baudRate;
+      poll();
+      freshAfter = sequence;
+      timer = Timer.periodic(const Duration(seconds: 1), (_) => poll());
+    }
   }
 
   void authChanged() {
@@ -200,7 +211,8 @@ class _SerialMonitorState extends State<SerialMonitor> {
     }
   }
 
-  Future<void> save() async {
+  Future<void> save({bool analyze = false}) async {
+    final destination = widget.sessionId;
     // Reuse the exact payload/id after uncertain delivery; do not create duplicates.
     if (captureId == null) {
       captureId = clientId(); captureLines = List<String>.of(lines);
@@ -208,14 +220,26 @@ class _SerialMonitorState extends State<SerialMonitor> {
     }
     setState(() { saving = true; error = null; });
     try {
-      await widget.api.request('/sessions/${widget.sessionId}/serial-captures', method: 'POST', data: {
+      final capture = await widget.api.request('/sessions/$destination/serial-captures', method: 'POST', data: {
         'client_id': captureId, 'baud_rate': captureBaudRate, 'lines': captureLines,
       });
-      if (!mounted) return;
+      if (!mounted || widget.sessionId != destination) return;
+      if (analyze) {
+        await widget.api.request('/sessions/$destination/analysis', method: 'POST',
+          data: {'evidence_id': capture['id']});
+      }
+      if (!mounted || widget.sessionId != destination) return;
       setState(() { savedSequence = captureSequence; captureId = null; captureLines = null; });
       await widget.onSaved();
     } catch (e) {
-      if (mounted) setState(() => error = errorMessage(e, language: widget.api.language));
+      if (mounted && widget.sessionId == destination) {
+        setState(() {
+          if (e is DioException && e.response != null && (e.response!.statusCode ?? 500) < 500) {
+            captureId = null; captureLines = null;
+          }
+          error = errorMessage(e, language: widget.api.language);
+        });
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -227,7 +251,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
     widget.api.removeListener(authChanged);
     timer?.cancel();
     // Never close a fixed-protocol instrument owned by another controller.
-    if (connected || connecting) unawaited(port.disconnect());
+    if (connecting || (connected && !widget.maintainConnection)) unawaited(port.disconnect());
     super.dispose();
   }
 
@@ -268,7 +292,10 @@ class _SerialMonitorState extends State<SerialMonitor> {
       if (points.isEmpty) Padding(
         padding: const EdgeInsets.only(top: 12), child: Text(strings.t('serialConfirmCriteria')),
       ),
-      for (final point in points) Builder(builder: (context) {
+      if (observations.isEmpty && lines.isNotEmpty) Padding(
+        padding: const EdgeInsets.only(top: 12), child: Text(strings.t('serialTextOnlyHelp')),
+      ),
+      for (final point in observations.isEmpty ? <Map>[] : points) Builder(builder: (context) {
         final compatible = observations.where((sample) => serialSupportsObservation(point, sample)).toList();
         final chosen = compatible.any((sample) => sample['channel'] == bindings[point['id']])
             ? bindings[point['id']] : null;
@@ -293,7 +320,7 @@ class _SerialMonitorState extends State<SerialMonitor> {
           ),
         );
       }),
-      if (points.isNotEmpty) SwitchListTile(
+      if (points.isNotEmpty && observations.isNotEmpty) SwitchListTile(
         key: const ValueKey('serial-automatic'),
         contentPadding: EdgeInsets.zero,
         title: Text(strings.t('serialAutomatic')),
@@ -326,13 +353,14 @@ class _SerialMonitorState extends State<SerialMonitor> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final reportedErrors = serialErrorMessages(lines);
     return ExpansionTile(
       controller: widget.expansionController,
       // Expansion flags and scroll offsets must have distinct storage identifiers.
       key: PageStorageKey('serial-monitor-${widget.sessionId}'),
       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
       title: Text(strings.t('serialMonitorTitle')),
-      subtitle: Text(strings.t('serialMonitorSubtitle')),
+      subtitle: Text(strings.t(connected ? 'serialConnectedSummary' : 'serialMonitorSubtitle')),
       leading: const Icon(Icons.usb),
       initiallyExpanded: widget.initiallyExpanded ?? widget.session.isNotEmpty,
       childrenPadding: const EdgeInsets.only(bottom: 20),
@@ -371,6 +399,33 @@ class _SerialMonitorState extends State<SerialMonitor> {
           }),
           const SizedBox(height: 12),
           Text(strings.t(connecting ? 'serialConnecting' : connected ? 'serialListening' : 'serialDisconnected')),
+          if (reportedErrors.isNotEmpty) Padding(
+            key: const ValueKey('serial-reported-errors'),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(strings.t('serialErrorsTitle'), style: Theme.of(context).textTheme.titleMedium),
+              for (final message in reportedErrors) Padding(
+                padding: const EdgeInsets.only(top: 8), child: Text(message)),
+              const SizedBox(height: 8),
+              Text(strings.t('serialErrorsHelp')),
+            ]),
+          ),
+          if (widget.sessionId.isNotEmpty && lines.isNotEmpty) Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Wrap(spacing: 12, runSpacing: 12, children: [
+              FilledButton.icon(
+                key: const ValueKey('serial-analyze-messages'),
+                onPressed: widget.canSave && !saving && !recording &&
+                    ['ready', 'awaiting_evidence', 'awaiting_confirmation', 'awaiting_measurement']
+                        .contains(widget.session['state']) ? () => save(analyze: true) : null,
+                icon: const Icon(Icons.troubleshoot), label: Text(strings.t('serialAnalyzeMessages')),
+              ),
+              if (widget.onProgram != null) OutlinedButton.icon(
+                onPressed: widget.canSave && !saving && !recording ? widget.onProgram : null,
+                icon: const Icon(Icons.code), label: Text(strings.t('attachProgram')),
+              ),
+            ]),
+          ),
           if (connected) automaticReadings(strings),
           if (lines.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(strings.t('serialWaiting')))

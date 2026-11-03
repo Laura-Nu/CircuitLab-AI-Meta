@@ -69,7 +69,62 @@ class DeleteApi extends TestApi {
   }
 }
 
+class ProblemApi extends TestApi {
+  Map<String, dynamic>? problem;
+  Map<String, dynamic>? review;
+  ProblemApi() : super(authenticated: true, fixture: sessionFixture());
+  @override
+  Future<dynamic> request(String path, {String method = 'GET', dynamic data}) async {
+    if (method == 'POST' && path.endsWith('/diagnostic-context')) {
+      problem = Map<String, dynamic>.from(data);
+      return {'id': 'reported-problem'};
+    }
+    if (method == 'POST' && path.endsWith('/analysis')) {
+      review = Map<String, dynamic>.from(data);
+      return {'job_id': 'review-problem'};
+    }
+    return super.request(path, method: method, data: data);
+  }
+}
+
 void main() {
+  testWidgets('An unavailable reading is reported without a value or a GND confirmation', (tester) async {
+    SharedPreferences.setMockInitialValues({'circuitlab.language': 'es'});
+    tester.view.physicalSize = const Size(390, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final strings = AppStrings('es');
+    final api = ProblemApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [apiProvider.overrideWithValue(api)], child: const CircuitLabApp(),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Digital fixture'));
+    await tester.tap(find.text('Digital fixture'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text(strings.t('recordMeasurement')));
+    await tester.tap(find.text(strings.t('recordMeasurement')));
+    await tester.pumpAndSettle();
+    final report = find.byKey(const ValueKey('report-missing-reading'));
+    await tester.ensureVisible(report);
+    await tester.tap(report);
+    await tester.pumpAndSettle();
+    expect(find.byType(CheckboxListTile), findsNothing);
+    final description = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextFormField));
+    await tester.enterText(description, 'ERROR: DHT11 sin lectura valida.');
+    await tester.tap(find.text(strings.t('saveAndReview')));
+    await tester.pumpAndSettle();
+    expect(api.problem?['kind'], 'problem');
+    expect(api.problem?['point_id'], 'TP1');
+    expect(api.problem?['content'], 'ERROR: DHT11 sin lectura valida.');
+    expect(api.recorded, isNull);
+    expect(api.review, {'evidence_id': 'reported-problem'});
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
   for (final language in ['en', 'es']) {
     for (final width in [320.0, 1440.0]) {
       testWidgets(

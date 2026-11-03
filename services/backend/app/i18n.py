@@ -4,6 +4,11 @@ import re
 from fastapi import Request
 
 ERRORS = {
+    "El seguimiento requiere una sesión finalizada": ("follow_up_requires_finished", "Finish the current session before starting a follow-up"),
+    "La sesión no admite contexto en este estado": ("diagnostic_context_state", "This session cannot accept diagnostic context in its current state"),
+    "Se alcanzó el límite de adjuntos de este tipo": ("diagnostic_context_limit", "The attachment limit for this evidence type has been reached"),
+    "Adjunta el error, los mensajes o el código actual para revisar el diagnóstico": (
+        "fresh_diagnostic_context_required", "Attach the current error, messages or program to review the diagnosis"),
     "El identificador ya pertenece a otra lectura": ("serial_reading_conflict", "This identifier already belongs to a different reading"),
     "Espera un dato USB nuevo para esta comprobación": ("serial_reading_stale", "Wait for a fresh USB value for this check"),
     "El dato USB no cumple el formato de telemetría": ("serial_reading_invalid", "The USB value does not match the telemetry format"),

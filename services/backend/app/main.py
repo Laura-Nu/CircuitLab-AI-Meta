@@ -263,11 +263,18 @@ def create_session(
     language=Depends(request_language),
 ):
     session = Session(
-        owner_id=user.id, language=body.language or language, **body.model_dump(exclude={"language"})
+        owner_id=user.id, language=body.language or language,
+        **body.model_dump(exclude={"language", "reference_session_id"})
     )
+    if body.reference_session_id:
+        previous = authorized(db, body.reference_session_id, user, write=True)
+        if previous.state not in {"resolved", "no_fault_found", "inconclusive", "cancelled"}:
+            raise HTTPException(409, "El seguimiento requiere una sesión finalizada")
+        session.specification = {**previous.specification, "confirmed": False}
     db.add(session)
     db.flush()
-    record(db, session, "session_created", {"family": session.family, "purpose": session.purpose})
+    record(db, session, "session_created", {"family": session.family, "purpose": session.purpose,
+                                           "reference_session_id": body.reference_session_id})
     commit(db)
     return serialize(session)
 
@@ -331,6 +338,9 @@ def details(db, session):
     result["serial_captures"] = [serialize(e) for e in db.scalars(select(Event).where(
         Event.session_id == session.id, Event.kind == "serial_captured",
     ).order_by(Event.sequence.desc()).limit(5))]
+    result["context_evidence"] = [serialize(e) for e in db.scalars(select(Event).where(
+        Event.session_id == session.id, Event.kind.in_(["program_submitted", "problem_reported"]),
+    ).order_by(Event.sequence.desc()).limit(5))]
     return result
 
 
@@ -356,6 +366,31 @@ def capture_serial(session_id: str, body: s.SerialCapture,
         **body.model_dump(), "source": "serial_reported", "captured_at": time.time(),
         "physical_verification": False,
     })
+    commit(db)
+    return serialize(db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.sequence == session.version)))
+
+
+@app.post(prefix + "/sessions/{session_id}/diagnostic-context", status_code=201)
+def diagnostic_context(session_id: str, body: s.DiagnosticContext,
+                       user=Depends(current_user), db: DBSession = Depends(get_db)):
+    session = authorized(db, session_id, user, write=True)
+    kind = "program_submitted" if body.kind == "program" else "problem_reported"
+    existing = db.scalar(select(Event).where(
+        Event.session_id == session.id, Event.kind == kind,
+        Event.data["client_id"].as_string() == body.client_id,
+    ))
+    if existing:
+        return serialize(existing)
+    if session.state in {"resolved", "no_fault_found", "inconclusive", "cancelled", "analyzing"}:
+        raise HTTPException(409, "La sesión no admite contexto en este estado")
+    if body.point_id and body.point_id not in {p["id"] for p in session.specification.get("points", [])}:
+        raise HTTPException(422, "Punto no autorizado por el esquema")
+    count = db.scalar(select(func.count(Event.id)).where(Event.session_id == session.id, Event.kind == kind))
+    if count >= (3 if body.kind == "program" else 20):
+        raise HTTPException(422, "Se alcanzó el límite de adjuntos de este tipo")
+    record(db, session, kind, {**body.model_dump(), "source": "human_upload" if body.kind == "program"
+                             else "human_observation", "physical_verification": False})
     commit(db)
     return serialize(db.scalar(select(Event).where(
         Event.session_id == session.id, Event.sequence == session.version)))
@@ -527,6 +562,7 @@ def download(session_id: str, evidence_id: str, user=Depends(current_user), db: 
 @app.post(prefix + "/sessions/{session_id}/analysis", status_code=202)
 def analysis(
     session_id: str,
+    body: s.AnalysisRequest | None = None,
     user=Depends(current_user),
     db: DBSession = Depends(get_db),
     language=Depends(request_language),
@@ -538,7 +574,18 @@ def analysis(
         count = len(list(db.scalars(select(Evidence.id).where(Evidence.session_id == session_id, Evidence.removed_at.is_(None)))))
         if count > image_limit(settings()):
             raise HTTPException(422, "Demasiadas imágenes para el proveedor seleccionado")
-    job = enqueue(db, session)
+    reconsider = False
+    if body and body.evidence_id:
+        evidence = db.scalar(select(Event).where(
+            Event.id == body.evidence_id, Event.session_id == session.id,
+            Event.kind.in_(["serial_captured", "program_submitted", "problem_reported"]),
+        ))
+        last_plan = db.scalar(select(func.max(Event.sequence)).where(
+            Event.session_id == session.id, Event.kind == "diagnosis_updated")) or 0
+        if not evidence or evidence.sequence <= last_plan:
+            raise HTTPException(409, "Adjunta el error, los mensajes o el código actual para revisar el diagnóstico")
+        reconsider = True
+    job = enqueue(db, session, reconsider=reconsider)
     commit(db)
     return {"job_id": job.id, "status": job.status}
 

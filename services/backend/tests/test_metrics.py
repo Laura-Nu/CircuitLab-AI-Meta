@@ -35,7 +35,8 @@ def test_metrics_require_active_administrator(client, headers, database):
 
 def test_real_audits_are_counted_once_with_separate_simulation_and_measurement_sources(client, database, headers):
     admin = administrator_headers(database, headers)
-    now = time.time()
+    # Keep fixtures inside the window on clocks with different subsecond precision.
+    now = time.time() - 1
     with database() as db:
         owner = db.scalar(select(User).where(User.email == "owner@example.test"))
         real = Session(owner_id=owner.id, title="Private session", family="voltage_divider", expected="Private spec",
@@ -45,20 +46,20 @@ def test_real_audits_are_counted_once_with_separate_simulation_and_measurement_s
         db.add_all([real, simulated])
         db.flush()
         for duration, status, total in ((100, 200, 100), (300, 429, 0)):
-            db.add(ModelRun(session_id=real.id, data={
+            db.add(ModelRun(session_id=real.id, created_at=now, data={
                 "run_kind": "provider_exchange", "provider": "meta", "model": "enabled-model",
                 "http_status": status, "duration_ms": duration, "status": "received" if status == 200 else "error",
                 "usage": {"prompt_tokens": 60, "completion_tokens": 40, "total_tokens": total} if total else {},
                 "response_message": {"content": "PRIVATE prompt, raw answer and private-api-key must not leave metrics"},
             }))
         db.add_all([
-            ModelRun(session_id=real.id, data={"run_kind": "diagnosis", "provider": "meta", "model": "enabled-model",
+            ModelRun(session_id=real.id, created_at=now, data={"run_kind": "diagnosis", "provider": "meta", "model": "enabled-model",
                      "real_network_attempt": True, "duration_ms": 400, "usage": {"total_tokens": 100},
                      "output": {"action": "read_voltage"}, "exchanges": [{"usage": {"total_tokens": 100}}]}),
-            ModelRun(session_id=real.id, data={"run_kind": "tool_execution", "status": "executed", "provider": "meta",
+            ModelRun(session_id=real.id, created_at=now, data={"run_kind": "tool_execution", "status": "executed", "provider": "meta",
                      "result": {"private": "Private measurement payload"}}),
-            ModelRun(session_id=real.id, data={"status": "error", "error": "analysis_failed"}),
-            ModelRun(session_id=simulated.id, data={"provider": "simulation", "output": {"action": "read_voltage"}}),
+            ModelRun(session_id=real.id, created_at=now, data={"status": "error", "error": "analysis_failed"}),
+            ModelRun(session_id=simulated.id, created_at=now, data={"provider": "simulation", "output": {"action": "read_voltage"}}),
             Measurement(session_id=real.id, client_id="simulated-fixture", point_id="TP1", value=.04,
                         measured_at=now, source="simulated"),
             Measurement(session_id=real.id, client_id="instrument", point_id="TP1", value=2.5,
@@ -101,7 +102,8 @@ def test_metrics_window_uses_call_time_and_keeps_current_queue(client, database,
         base = {"run_kind": "provider_exchange", "provider": "meta", "model": "enabled-model",
                 "http_status": 200, "status": "received"}
         db.add_all([ModelRun(session_id=session.id, data=base, created_at=old),
-                    ModelRun(session_id=session.id, data={**base, "finish_reason": "length"}),
+                    ModelRun(session_id=session.id, data={**base, "finish_reason": "length"},
+                             created_at=(datetime.now(UTC) - timedelta(seconds=1)).timestamp()),
                     Job(session_id=session.id, status="pending", created_at=old)])
         db.commit()
     data = client.get(P + "/admin/metrics?days=7", headers=admin).json()

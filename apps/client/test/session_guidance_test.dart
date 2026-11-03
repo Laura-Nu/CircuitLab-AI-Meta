@@ -17,6 +17,7 @@ void main() {
         final strings = AppStrings(language);
         var manual = 0;
         var baseline = 0;
+        var programs = 0;
         final session = <String, dynamic>{
           'state': 'awaiting_measurement',
           'can_edit': true,
@@ -50,6 +51,7 @@ void main() {
                     session: session,
                     busy: false,
                     onSpec: () {},
+                    onProgram: () => programs++,
                     onEvidence: () {},
                     onAnalyze: () {},
                     onConfirm: () {},
@@ -83,6 +85,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Reason for the selected observation').hitTestable(), findsOneWidget);
         expect(find.text('Untranslated rationale'), findsNothing);
+        session['specification'] = {'points': [
+          {'id': 'TP2', 'label': 'Humidity available', 'kind': 'reported_state',
+            'value_kind': 'boolean', 'expected_state': true},
+        ]};
+        await show();
+        expect(find.text(strings.t('requestedObservationGuide', {'point': 'Humidity available'})), findsOneWidget);
+        expect(find.text(strings.t('requestedPointGuide', {'point': 'Humidity available'})), findsNothing);
+        session['state'] = 'awaiting_evidence';
+        session['pending_test'] = {'action': 'request_program', 'instruction': 'Attach the loaded code.'};
+        await show();
+        await tester.ensureVisible(find.text(strings.t('attachProgram')));
+        await tester.tap(find.text(strings.t('attachProgram')));
+        expect(programs, 1);
         session['state'] = 'awaiting_functional_check';
         session['completion'] = {'baseline_available': true};
         await show();
@@ -99,6 +114,16 @@ void main() {
         expect(find.text(strings.t('readableReport')), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         expect(tester.takeException(), isNull);
+        session['state'] = 'inconclusive';
+        session['pending_test'] = {'instruction': 'Review the DHT pin and attach the actual program.'};
+        await show();
+        expect(find.text('Review the DHT pin and attach the actual program.'), findsOneWidget);
+        session['verifications'] = [{'data': {'functional_check': {
+          'passed': false, 'observations': 'Record cancelled after DHT error',
+        }}}];
+        await show();
+        expect(find.text('Record cancelled after DHT error'), findsOneWidget);
+        expect(find.text(strings.t('failedFunctionFollowUpHelp')), findsOneWidget);
         session['state'] = 'awaiting_measurement';
         session['can_edit'] = false;
         await show();

@@ -12,6 +12,8 @@ import '../main.dart';
 import '../l10n/app_strings.dart';
 import '../core/form_fields.dart';
 import '../core/measurement_points.dart';
+import '../core/serial_log.dart';
+import '../core/program_file.dart';
 import '../core/browser_usb.dart';
 import '../l10n/language.dart';
 import 'accounts.dart';
@@ -1221,6 +1223,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
           busy: busy,
           analyzing: analyzing,
           onSpec: editSpec,
+          onProgram: submitProgram,
           onEvidence: capture,
           onAnalyze: requestAnalysis,
           onConfirm: confirmConnection,
@@ -1238,7 +1241,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
           onVerify: () => post('verification'),
           onBaseline: recordBaselineCheck,
           onReport: showReport,
-          onNew: createSession,
+          onNew: () => createSession(fromSession: s),
         ),
         SizedBox(height: 20),
         if (editable && !sessionFinished(state)) ...[
@@ -1246,6 +1249,9 @@ class _WorkbenchState extends ConsumerState<Workbench>
           Container(key: boardDataKey, child: SerialMonitor(
             key: ValueKey('serial-${s['id']}'),
             api: api,
+            serial: usb.port,
+            maintainConnection: true,
+            onProgram: submitProgram,
             sessionId: s['id'],
             session: s,
             expansionController: boardExpansion,
@@ -1587,6 +1593,8 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'specification_confirmed': tr('schematicAndCriteriaConfirmed'),
         'evidence_added': tr('imageAttached'),
         'serial_captured': tr('serialCapturedEvent'),
+        'program_submitted': tr('programSubmittedEvent'),
+        'problem_reported': tr('problemReportedEvent'),
         'serial_reading_received': tr('serialReadingReceivedEvent'),
         'connection_confirmed': tr('connectionConfirmed'),
         'measurement_recorded': tr('measurementEvent', {
@@ -1625,6 +1633,16 @@ class _WorkbenchState extends ConsumerState<Workbench>
       SizedBox(height: 12),
       Text(tr('usbDevicesIntro'), style: TextStyle(color: muted)),
       SizedBox(height: 24),
+      SerialMonitor(
+        key: const ValueKey('device-board-monitor'),
+        api: api, serial: usb.port, maintainConnection: true,
+        sessionId: '', initiallyExpanded: true, canSave: false,
+        onSaved: () async {},
+      ),
+      Text(tr('boardConnectionScope'), style: TextStyle(color: muted)),
+      const SizedBox(height: 24),
+      Text(tr('instrumentDevicesTitle'), style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
       BridgeSetupCard(supported: usb.supported),
       if (!usb.active && usb.state != 'idle')
         Padding(
@@ -1741,18 +1759,23 @@ class _WorkbenchState extends ConsumerState<Workbench>
       data: data,
     );
   });
-  Future<void> createSession() async {
-    final draft = await api.outbox.draft(api.scope) ?? {};
+  Future<void> createSession({Map<String, dynamic>? fromSession}) async {
+    final draft = fromSession ?? await api.outbox.draft(api.scope) ?? {};
     if (!mounted) return;
-    final title = TextEditingController(text: draft['title'] ?? '');
+    final previousTitle = draft['title'] as String? ?? '';
+    final title = TextEditingController(text: fromSession == null ? previousTitle
+        : '${previousTitle.length > 100 ? previousTitle.substring(0, 100) : previousTitle} · ${tr('followUpSuffix')}');
     final expected = TextEditingController(text: draft['expected'] ?? '');
-    final symptoms = TextEditingController(text: draft['symptoms'] ?? '');
+    final previousChecks = fromSession?['verifications'] as List? ?? [];
+    final lastFunction = previousChecks.isEmpty ? null : previousChecks.last['data']?['functional_check'];
+    final symptoms = TextEditingController(text: lastFunction?['passed'] == false
+        ? lastFunction['observations'] ?? draft['symptoms'] ?? '' : draft['symptoms'] ?? '');
     final setup = TextEditingController(text: draft['setup'] ?? '');
     final supply = TextEditingController(
       text: draft['supply_v'] is num ? formatNumber(draft['supply_v'] as num) : '',
     );
     String family = draft['family'] ?? 'microcontroller';
-    String purpose = draft['purpose'] ?? 'diagnosis';
+    String purpose = lastFunction?['passed'] == false ? 'diagnosis' : draft['purpose'] ?? 'diagnosis';
     String? supplyMode = draft['supply_mode'] as String? ??
         (supply.text.isEmpty ? null : ['3.3', '5'].contains(supply.text) ? supply.text : 'other');
     final accepted = await dialog(
@@ -1857,6 +1880,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
       tr('createSession'),
     );
     final data = {
+      if (fromSession != null) 'reference_session_id': fromSession['id'],
       'title': title.text.trim(),
       'purpose': purpose,
       'family': family,
@@ -1883,7 +1907,20 @@ class _WorkbenchState extends ConsumerState<Workbench>
   Future<void> requestAnalysis() async {
     setState(() => analysisRequested = true);
     try {
-      await post('analysis');
+      await action(() async {
+        final sessionId = selected!['id'];
+        final snapshot = usb.port.monitorSnapshot();
+        final lines = List<String>.from(snapshot['lines'] as List? ?? []);
+        String? evidenceId;
+        if (snapshot['connected'] == true && lines.isNotEmpty) {
+          final evidence = await api.request('/sessions/$sessionId/serial-captures', method: 'POST', data: {
+            'client_id': clientId(), 'baud_rate': snapshot['baud_rate'] ?? 115200, 'lines': lines,
+          });
+          evidenceId = evidence['id'];
+        }
+        await api.request('/sessions/$sessionId/analysis', method: 'POST',
+          data: evidenceId == null ? null : {'evidence_id': evidenceId});
+      });
     } finally {
       if (mounted) setState(() => analysisRequested = false);
     }
@@ -1955,6 +1992,7 @@ class _WorkbenchState extends ConsumerState<Workbench>
     final value = TextEditingController();
     bool confirmed = false;
     bool? observedState;
+    bool reportProblem = false;
     bool digital() => booleanPoint(s['specification'], point);
     Map criterion() => measurementPoint(s['specification'], point);
     bool textReading() => criterion()['value_kind'] == 'text';
@@ -2015,6 +2053,15 @@ class _WorkbenchState extends ConsumerState<Workbench>
             ),
             const SizedBox(height: 8),
             Text(tr('observationActualHelp')),
+            TextButton.icon(
+              key: const ValueKey('report-missing-reading'),
+              onPressed: () {
+                reportProblem = true;
+                Navigator.of(context, rootNavigator: true).pop(false);
+              },
+              icon: const Icon(Icons.error_outline),
+              label: Text(tr('reportReadingProblem')),
+            ),
             SizedBox(height: 16),
             if (digital())
               DropdownButtonFormField<bool>(
@@ -2080,6 +2127,11 @@ class _WorkbenchState extends ConsumerState<Workbench>
       validate: () =>
           confirmed ? null : tr('confirmTheConditionsBeforeMeasuring'),
     );
+    if (reportProblem) {
+      value.dispose();
+      await submitContext(program: false, pointId: point);
+      return;
+    }
     if (accepted == true) {
       await action(() async {
         if (!confirmed) {
@@ -2122,6 +2174,59 @@ class _WorkbenchState extends ConsumerState<Workbench>
         'confirmed': true,
       });
     }
+  }
+
+  Future<void> submitProgram() => submitContext(program: true);
+
+  Future<void> submitContext({required bool program, String? pointId}) async {
+    final session = selected!;
+    final snapshot = usb.port.monitorSnapshot();
+    final lines = List<String>.from(snapshot['lines'] as List? ?? []);
+    final content = TextEditingController(text: program ? '' : serialErrorMessages(lines).join('\n'));
+    bool importFailed = false;
+    final accepted = await dialog(
+      tr(program ? 'attachProgram' : 'reportReadingProblem'),
+      StatefulBuilder(builder: (dialogContext, update) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(tr(program ? 'programEvidenceHelp' : 'problemEvidenceHelp')),
+        if (program && programFileSupported) TextButton.icon(
+          icon: const Icon(Icons.upload_file), label: Text(tr('chooseProgramFile')),
+          onPressed: () async {
+            try {
+              final source = await pickProgramFile();
+              if (source != null && dialogContext.mounted) {
+                content.text = source;
+                update(() => importFailed = false);
+              }
+            } catch (_) {
+              if (dialogContext.mounted) update(() => importFailed = true);
+            }
+          },
+        ),
+        if (importFailed) Text(tr('programImportError')),
+        const SizedBox(height: 16),
+        field(content, tr(program ? 'programSource' : 'observedProblem'),
+          lines: program ? 12 : 4, minLength: 5, maxLength: program ? 20000 : 2000),
+      ])),
+      tr('saveAndReview'),
+    );
+    if (accepted == true) {
+      final payload = {'client_id': clientId(), 'kind': program ? 'program' : 'problem',
+        'content': content.text.trim(), if (pointId != null) 'point_id': pointId};
+      await action(() async {
+        if (snapshot['connected'] == true && lines.isNotEmpty) {
+          await api.request('/sessions/${session['id']}/serial-captures', method: 'POST', data: {
+            'client_id': clientId(), 'baud_rate': snapshot['baud_rate'] ?? 115200, 'lines': lines,
+          });
+        }
+        final evidence = await api.request('/sessions/${session['id']}/diagnostic-context',
+          method: 'POST', data: payload);
+        if (['ready', 'awaiting_evidence', 'awaiting_confirmation', 'awaiting_measurement'].contains(session['state'])) {
+          await api.request('/sessions/${session['id']}/analysis', method: 'POST',
+            data: {'evidence_id': evidence['id']});
+        }
+      });
+    }
+    content.dispose();
   }
 
   Future<void> recordBaselineCheck() async {

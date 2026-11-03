@@ -54,7 +54,7 @@ def transition(db, session, state, reason):
     record(db, session, "state_changed", {"from": previous, "to": state, "reason": reason})
 
 
-def enqueue(db, session, kind="analysis"):
+def enqueue(db, session, kind="analysis", *, reconsider=False):
     active = db.scalar(
         select(Job).where(Job.session_id == session.id, Job.status.in_(["pending", "running"]))
     )
@@ -68,9 +68,9 @@ def enqueue(db, session, kind="analysis"):
     if kind == "analysis":
         if not session.spec_version:
             raise HTTPException(409, "Confirma el esquema y los criterios funcionales antes del análisis")
-        if session.state == "awaiting_measurement":
+        if session.state == "awaiting_measurement" and not reconsider:
             raise HTTPException(409, "Registra la medición solicitada antes de continuar")
-        if session.state == "awaiting_confirmation":
+        if session.state == "awaiting_confirmation" and not reconsider:
             raise HTTPException(409, "Confirma físicamente la conexión solicitada antes de continuar")
         transition(db, session, "analyzing", "analysis_requested")
     job = Job(session_id=session.id, kind=kind, lease_until=time.time())

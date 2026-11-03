@@ -40,6 +40,8 @@ test('Board monitor reads actual multi-sensor serial output without writing comm
   await new Promise(resolve=>setTimeout(resolve,5));
   const snapshot=JSON.parse(f.api.monitorSnapshot());
   assert.equal(speed,9600); assert.equal(snapshot.connected,true);
+  assert.equal(snapshot.baud_rate,9600);
+  assert.equal(JSON.parse(f.api.monitorSnapshot()).baud_rate,9600);
   assert.deepEqual(snapshot.lines,['DHT11 temperature=23.5 C humidity=48 %','RFID detected=true','GPS fix=false']);
   assert.equal(snapshot.sequence,3); assert.equal(f.writes.length,0);
   assert.equal(JSON.parse(await f.api.read(JSON.stringify(command),'["TP1"]')).status,'precondition_failed');

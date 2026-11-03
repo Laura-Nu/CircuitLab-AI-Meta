@@ -61,6 +61,7 @@ class SessionGuidance extends StatelessWidget {
   final Map<String, dynamic> session;
   final bool busy, analyzing;
   final VoidCallback? onBoard;
+  final VoidCallback? onProgram;
   final VoidCallback onSpec,
       onEvidence,
       onAnalyze,
@@ -79,6 +80,7 @@ class SessionGuidance extends StatelessWidget {
     required this.busy,
     this.analyzing = false,
     this.onBoard,
+    this.onProgram,
     required this.onSpec,
     required this.onEvidence,
     required this.onAnalyze,
@@ -110,6 +112,8 @@ class SessionGuidance extends StatelessWidget {
     final verification = verifications.isEmpty
         ? null
         : verifications.last['data'] as Map?;
+    final recordedFunction = verification?['functional_check'] as Map? ?? functional;
+    final functionFailed = recordedFunction?['passed'] == false;
     final jobs = session['jobs'] as List? ?? [];
     final activeJobs = jobs
         .where(
@@ -176,7 +180,11 @@ class SessionGuidance extends StatelessWidget {
           );
         }
       } else if (state == 'awaiting_evidence') {
-        button('attachRequestedView', onEvidence, Icons.add_a_photo_outlined);
+        if (plan['action'] == 'request_program' && onProgram != null) {
+          button('attachProgram', onProgram!, Icons.code);
+        } else {
+          button('attachRequestedView', onEvidence, Icons.add_a_photo_outlined);
+        }
       } else if (state == 'awaiting_confirmation') {
         button('confirmConnection', onConfirm, Icons.fact_check_outlined);
       } else if (state == 'awaiting_measurement' || state == 'verifying') {
@@ -225,6 +233,10 @@ class SessionGuidance extends StatelessWidget {
       } else if (state == 'awaiting_functional_check' || baseline) {
         button('checkFunctionAndFinish', onBaseline, Icons.checklist);
       }
+    }
+    if (!terminal && !analyzing && onProgram != null && plan['action'] != 'request_program' &&
+        ['draft', 'ready', 'awaiting_evidence', 'awaiting_confirmation', 'awaiting_measurement'].contains(state)) {
+      button('attachProgram', onProgram!, Icons.code, filled: false);
     }
     if (terminal) {
       buttons.add(
@@ -311,7 +323,7 @@ class SessionGuidance extends StatelessWidget {
                 ),
               ],
             ),
-          if (!terminal && !analyzing && plan['instruction'] != null) ...[
+          if ((!terminal || (state == 'inconclusive' && !functionFailed)) && !analyzing && plan['instruction'] != null) ...[
             const SizedBox(height: 16),
             Text(
               (plan['translations']
@@ -323,7 +335,9 @@ class SessionGuidance extends StatelessWidget {
           if (state == 'awaiting_measurement' && plan['point_id'] != null) ...[
             const SizedBox(height: 12),
             Text(
-              strings.t('requestedPointGuide', {
+              strings.t(instrumentSupportsObservation(measurementPoint(
+                    session['specification'] as Map? ?? {}, plan['point_id']))
+                  ? 'requestedPointGuide' : 'requestedObservationGuide', {
                 'point': measurementPointName(
                   session['specification'] as Map? ?? {},
                   plan['point_id'],
@@ -332,7 +346,7 @@ class SessionGuidance extends StatelessWidget {
               style: TextStyle(color: tone, fontWeight: FontWeight.w600),
             ),
           ],
-          if (!terminal && !analyzing && plan['rationale'] != null) ...[
+          if ((!terminal || state == 'inconclusive') && !analyzing && plan['rationale'] != null) ...[
             const SizedBox(height: 8),
             ExpansionTile(
               key: PageStorageKey('step-reason-${session['id']}-${session['analysis_steps']}'),
@@ -406,6 +420,13 @@ class SessionGuidance extends StatelessWidget {
               session['specification']?['functional_description'] ?? '',
               style: const TextStyle(color: Color(0xFFB9C6CF)),
             ),
+          ],
+          if (terminal && functionFailed) ...[
+            const SizedBox(height: 16),
+            Text(tr('functionalTestFailed'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (recordedFunction?['observations'] != null) Text('${recordedFunction!['observations']}'),
+            const SizedBox(height: 8),
+            Text(tr('failedFunctionFollowUpHelp')),
           ],
           if (terminal &&
               verification?['physical_verification'] != true &&

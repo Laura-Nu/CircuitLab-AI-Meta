@@ -920,6 +920,58 @@
         }
       }
     },
+    "/api/v1/sessions/{session_id}/diagnostic-context": {
+      "post": {
+        "summary": "Diagnostic Context",
+        "operationId": "diagnostic_context_api_v1_sessions__session_id__diagnostic_context_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticContext"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}": {
       "get": {
         "summary": "Get Session",
@@ -1192,6 +1244,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AnalysisRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -2317,6 +2386,25 @@
         ],
         "title": "AccountUpdate"
       },
+      "AnalysisRequest": {
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AnalysisRequest"
+      },
       "Body_upload_api_v1_sessions__session_id__evidence_post": {
         "properties": {
           "client_id": {
@@ -2423,6 +2511,50 @@
           "confirmed"
         ],
         "title": "ConnectionConfirmation"
+      },
+      "DiagnosticContext": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Client Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "program",
+              "problem"
+            ],
+            "title": "Kind"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 5,
+            "title": "Content"
+          },
+          "point_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^TP[1-9][0-9]?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "client_id",
+          "kind",
+          "content"
+        ],
+        "title": "DiagnosticContext"
       },
       "Enroll": {
         "properties": {
@@ -3039,6 +3171,18 @@
       },
       "SessionCreate": {
         "properties": {
+          "reference_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Session Id"
+          },
           "language": {
             "anyOf": [
               {

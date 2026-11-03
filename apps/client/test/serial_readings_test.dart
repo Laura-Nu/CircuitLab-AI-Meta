@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:circuitlab_client/core/measurement_points.dart';
 import 'package:circuitlab_client/core/networking/api.dart';
 import 'package:circuitlab_client/core/usb_serial.dart';
+import 'package:circuitlab_client/core/browser_usb.dart';
+import 'package:circuitlab_client/core/serial_log.dart';
 import 'package:circuitlab_client/features/serial_monitor.dart';
 import 'package:circuitlab_client/l10n/app_strings.dart';
 import 'evidence_specification_test.dart' show shell;
@@ -13,6 +15,7 @@ import 'evidence_specification_test.dart' show shell;
 /// Synthetic USB/HTTP fixtures: these tests do not claim physical acquisition.
 class TelemetryPort extends UsbSerialPort {
   bool active = false;
+  int openCount = 0, closeCount = 0, baudRate = 115200;
   int sequence = 0;
   final observations = <Map<String, dynamic>>[];
   final lines = <String>[];
@@ -34,17 +37,19 @@ class TelemetryPort extends UsbSerialPort {
   bool get supported => true;
   @override
   Future<Map<String, dynamic>> connectMonitor(int baudRate) async {
+    openCount++;
+    this.baudRate = baudRate;
     active = true;
     return {'status': 'connected'};
   }
   @override
   Map<String, dynamic> monitorSnapshot() => {
-    'connected': active, 'sequence': sequence, 'dropped': 0,
+    'connected': active, 'sequence': sequence, 'dropped': 0, 'baud_rate': baudRate,
     'lines': List<String>.of(lines),
     'observations': List<Map<String, dynamic>>.of(observations),
   };
   @override
-  Future<void> disconnect() async { active = false; }
+  Future<void> disconnect() async { closeCount++; active = false; }
 }
 
 Map<String, dynamic> pendingSession({String point = 'TP1', int step = 1}) => {
@@ -61,13 +66,13 @@ Map<String, dynamic> pendingSession({String point = 'TP1', int step = 1}) => {
 
 Future<void> renderMonitor(WidgetTester tester, CircuitApi api, TelemetryPort port,
     Map<String, dynamic> session, Future<void> Function() onSaved,
-    {String sessionId = 'synthetic', bool canSave = true}) async {
+    {String sessionId = 'synthetic', bool canSave = true, bool maintainConnection = false}) async {
   await tester.pumpWidget(shell('es', Scaffold(body: SingleChildScrollView(
     padding: const EdgeInsets.all(16),
     child: SerialMonitor(
       key: const ValueKey('telemetry-fixture'),
       api: api, sessionId: sessionId, session: session, serial: port,
-      canSave: canSave, onSaved: onSaved,
+      canSave: canSave, onSaved: onSaved, maintainConnection: maintainConnection,
     ),
   ))));
   await tester.pump(const Duration(milliseconds: 300));
@@ -116,6 +121,81 @@ void main() {
   setUpAll(() async {
     await (FontLoader('Roboto')
       ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf'))).load();
+  });
+
+  test('Explicit program errors stay messages, never sensor values', () {
+    expect(serialErrorMessages([
+      'Leyendo temperatura y humedad...', 'ERROR: DHT11 sin lectura valida.',
+      'GPS: POSICION VALIDA', 'REGISTRO CANCELADO', 'No se modifico la tarjeta.',
+    ]), ['REGISTRO CANCELADO', 'ERROR: DHT11 sin lectura valida.']);
+    expect(serialErrorMessages(['No error occurred', 'Temperature: 0 °C']), isEmpty);
+  });
+
+  testWidgets('A failed DHT read can be analyzed without inventing a temperature', (tester) async {
+    final api = CircuitApi()..access = 'synthetic-error-fixture';
+    final port = TelemetryPort();
+    port.lines.addAll(['ERROR: DHT11 sin lectura valida.', 'GPS: POSICION VALIDA', 'REGISTRO CANCELADO']);
+    final paths = <String>[];
+    api.dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      paths.add(options.path);
+      if (options.path.endsWith('/serial-captures')) {
+        expect((options.data as Map)['lines'], contains('ERROR: DHT11 sin lectura valida.'));
+        handler.resolve(Response(requestOptions: options, statusCode: 201, data: {'id': 'actual-error-log'}));
+      } else {
+        expect(options.path, '/sessions/synthetic/analysis');
+        expect(options.data, {'evidence_id': 'actual-error-log'});
+        handler.resolve(Response(requestOptions: options, statusCode: 202, data: {'job_id': 'review-error'}));
+      }
+    }));
+    await renderMonitor(tester, api, port, pendingSession(), () async {});
+    await connectMonitor(tester);
+    expect(find.byKey(const ValueKey('serial-reported-errors')), findsOneWidget);
+    expect(find.byKey(const ValueKey('serial-channel-TP1-null')), findsNothing);
+    final analyze = find.byKey(const ValueKey('serial-analyze-messages'));
+    await tester.ensureVisible(analyze);
+    await tester.tap(analyze);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(paths, ['/sessions/synthetic/serial-captures', '/sessions/synthetic/analysis']);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
+  testWidgets('Shared board connection survives navigation and closes on sign out', (tester) async {
+    final api = CircuitApi()..access = 'synthetic-navigation-fixture';
+    final port = TelemetryPort()..emit('dht11.temperature', 23.5, '°C');
+    final owner = BrowserUsbController(api, serial: port);
+    await renderMonitor(tester, api, port, pendingSession(), () async {},
+      sessionId: 'devices', maintainConnection: true, canSave: false);
+    final baud = find.byType(DropdownButtonFormField<int>);
+    await tester.ensureVisible(baud);
+    await tester.tap(baud);
+    await tester.pump(const Duration(milliseconds: 300));
+    final speed = find.descendant(
+      of: find.byWidgetPredicate((widget) => widget is DropdownMenuItem<int> && widget.value == 9600),
+      matching: find.text('9600 baud'),
+    ).hitTestable();
+    await tester.tap(speed);
+    await tester.pump(const Duration(milliseconds: 300));
+    await connectMonitor(tester);
+    expect(port.openCount, 1);
+    await tester.pumpWidget(const SizedBox());
+    expect(port.active, isTrue);
+    expect(port.closeCount, 0);
+    await renderMonitor(tester, api, port, pendingSession(), () async {}, maintainConnection: true);
+    expect(tester.widget<DropdownButtonFormField<int>>(baud).initialValue, 9600);
+    expect(port.openCount, 1);
+    expect(find.byKey(const ValueKey('serial-reading-dht11.temperature-')), findsOneWidget);
+    api.access = null;
+    api.notifyListeners();
+    await tester.pump();
+    expect(port.active, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    owner.dispose();
+    api.dispose();
+    expect(tester.takeException(), isNull);
   });
 
   test('Serial bindings require the actual JSON type and declared unit', () {

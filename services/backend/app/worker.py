@@ -93,6 +93,11 @@ def snapshot(db, session):
                 Event.session_id == session.id, Event.kind == "serial_reading_received",
             ).order_by(Event.sequence.desc()).limit(32))
         ],
+        "context_evidence": [
+            {"id": e.id, **e.data} for e in db.scalars(select(Event).where(
+                Event.session_id == session.id, Event.kind.in_(["program_submitted", "problem_reported"]),
+            ).order_by(Event.sequence.desc()).limit(5))
+        ],
         "test_catalog": [localized_voltage_test(session.language), localized_digital_test(session.language)],
         "connection_confirmations": [
             e.data
@@ -104,7 +109,8 @@ def snapshot(db, session):
 
 
 def validate_plan(output, context):
-    known = {r["id"] for r in context["evidence"] + context["measurements"] + context.get("serial_captures", [])}
+    recorded_context = context.get("serial_captures", []) + context.get("context_evidence", [])
+    known = {r["id"] for r in context["evidence"] + context["measurements"] + recorded_context}
     measurements = {r["id"] for r in context["measurements"]}
     for hypothesis in output.hypotheses:
         if not set(hypothesis.evidence_ids).issubset(known):
@@ -125,7 +131,7 @@ def validate_plan(output, context):
         if point_is_boolean(point) != (output.action == "read_digital"):
             raise ValueError("The requested procedure does not match the authorized observation type")
     if output.action == "propose_intervention" and not any(
-        measurements.intersection(h.evidence_ids) for h in output.hypotheses
+        (measurements | {r["id"] for r in recorded_context}).intersection(h.evidence_ids) for h in output.hypotheses
     ):
         raise ValueError("Intervención sin evidencia de medición")
 
@@ -249,6 +255,7 @@ def process(job_id, lease_token):
                 record(db, session, "diagnosis_updated", data)
                 state = {
                     "request_additional_view": "awaiting_evidence",
+                    "request_program": "awaiting_evidence",
                     "request_connection_confirmation": "awaiting_confirmation",
                     "read_voltage": "awaiting_measurement",
                     "read_digital": "awaiting_measurement",

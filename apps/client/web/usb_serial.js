@@ -7,7 +7,7 @@
   const observations = new Map();
   const openingPorts = new Set();
   let generation = 0, starting = null;
-  let monitor = false, serialLines = [], serialBytes = 0, serialSequence = 0, dropped = 0;
+  let monitor = false, monitorBaudRate = 115200, serialLines = [], serialBytes = 0, serialSequence = 0, dropped = 0;
   const api = {
     get supported() { return !!(globalThis.isSecureContext && navigator.serial?.requestPort); },
     onDisconnect: null,
@@ -44,7 +44,7 @@
         await bounded(opened, 10000, "open_timeout");
         if (generation !== attempt) return JSON.stringify({status: "cancelled"});
         port = selected; buffer = ""; seen.clear();
-        monitor = passive; serialLines = []; serialBytes = 0; serialSequence = 0; dropped = 0; observations.clear();
+        monitor = passive; monitorBaudRate = baudRate; serialLines = []; serialBytes = 0; serialSequence = 0; dropped = 0; observations.clear();
         if (!port.readable || !port.writable) throw {code: "port_unavailable"};
         stage("starting_instrument");
         reading = readLoop(selected, attempt);
@@ -72,7 +72,7 @@
       return api.connect(JSON.stringify({mode: "monitor", baud_rate: baudRate}));
     },
     monitorSnapshot() {
-      return JSON.stringify({connected: !!port && monitor, sequence: serialSequence,
+      return JSON.stringify({connected: !!port && monitor, baud_rate: monitorBaudRate, sequence: serialSequence,
         lines: serialLines.map(item => item.text), observations: [...observations.values()], dropped});
     },
     async disconnect() {

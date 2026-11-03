@@ -303,11 +303,14 @@ class _SpecificationDialogState extends State<SpecificationDialog> {
               TextFormField(
                 key: ValueKey('${point.id}-expected-text'),
                 controller: point.expectedText,
+                onChanged: (_) => setState(() {}),
                 maxLength: 500,
                 decoration: InputDecoration(label: RequiredLabel(tr('expectedTextLabel')),
                   helperText: tr('expectedTextHelp'), helperMaxLines: 3),
                 validator: (value) => (value ?? '').trim().isEmpty ? tr('fieldRequired') : null,
               ),
+              if (RegExp(r'\b(ERROR|FALLO|FAILED)\s*:', caseSensitive: false).hasMatch(point.expectedText.text))
+                Text(tr('expectedErrorWarning'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ] else if (point.isNumber) ...[
               label,
               const SizedBox(height: 12),

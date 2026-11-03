@@ -76,6 +76,8 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
                 maxLength: 2000,
                 decoration: InputDecoration(
                   label: RequiredLabel(tr('functionalTestObservations')),
+                  hintText: tr('functionalObservationHint'),
+                  hintMaxLines: 3,
                 ),
                 onChanged: (_) => setState(() {}),
               ),
@@ -92,6 +94,7 @@ class _FunctionalCheckDialogState extends State<FunctionalCheckDialog> {
                 ),
                 onChanged: (value) => setState(() => confirmed = value == true),
               ),
+              if (passed == false) Text(tr('functionalFailureNextStep')),
             ],
           ),
         ),

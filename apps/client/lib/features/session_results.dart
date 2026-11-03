@@ -72,6 +72,27 @@ class SessionResults extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(strings.t('sessionReadingsCount', {'count': readings.length})),
+            if ((session['context_evidence'] as List? ?? []).isNotEmpty) ExpansionTile(
+              key: PageStorageKey('context-evidence-${session['id']}'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(strings.t('contextEvidenceTitle')),
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (final evidence in session['context_evidence'] as List) Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text(strings.t(evidence['kind'] == 'program_submitted'
+                      ? 'programSubmittedEvent' : 'problemReportedEvent')),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      key: PageStorageKey('context-scroll-${evidence['id']}'), primary: false,
+                      child: SelectableText('${evidence['data']['content']}',
+                        key: PageStorageKey('context-text-${evidence['id']}')),
+                    ),
+                  ),
+                ]),
+              )],
+            ),
             if ((session['serial_captures'] as List? ?? []).isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(strings.t('serialSavedCaptures', {

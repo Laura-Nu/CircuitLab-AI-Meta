@@ -47,7 +47,9 @@ class BrowserUsbController extends ChangeNotifier {
   }
 
   void _authChanged() {
-    if (!api.signedIn && (active || connecting)) unawaited(disconnect());
+    if (!api.signedIn && (active || connecting || port.monitorSnapshot()['connected'] == true)) {
+      unawaited(disconnect());
+    }
   }
 
   Future<void> connect(Map device) async {

@@ -51,6 +51,7 @@ class PasswordReset(Strict):
 
 
 class SessionCreate(Strict):
+    reference_session_id: str | None = Field(default=None, max_length=80)
     language: Literal["en", "es"] | None = None
     title: str = Field(min_length=3, max_length=120)
     family: Literal["led_resistor", "voltage_divider", "analog_sensor", "digital_signal", "microcontroller", "custom"]
@@ -217,6 +218,23 @@ class SerialCapture(Strict):
         return self
 
 
+class AnalysisRequest(Strict):
+    evidence_id: str | None = Field(default=None, max_length=80)
+
+
+class DiagnosticContext(Strict):
+    client_id: str = Field(min_length=8, max_length=80)
+    kind: Literal["program", "problem"]
+    content: str = Field(min_length=5, max_length=20000)
+    point_id: str | None = Field(default=None, pattern=r"^TP[1-9][0-9]?$")
+
+    @model_validator(mode="after")
+    def meaningful_content(self):
+        if len(self.content.strip()) < 5 or (self.kind == "problem" and len(self.content) > 2000):
+            raise ValueError("Provide the actual program or a concise observed problem")
+        return self
+
+
 class InterventionCreate(Strict):
     description: str = Field(min_length=5, max_length=2000)
     confirmed: Literal[True]
@@ -349,6 +367,7 @@ class DiagnosisOutput(Strict):
     hypotheses: list[HypothesisOutput] = Field(max_length=6)
     action: Literal[
         "request_additional_view",
+        "request_program",
         "request_connection_confirmation",
         "read_voltage",
         "read_digital",
