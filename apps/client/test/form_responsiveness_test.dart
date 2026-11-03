@@ -10,7 +10,7 @@ import 'package:circuitlab_client/features/accounts.dart';
 import 'package:circuitlab_client/features/functional_check.dart';
 import 'accounts_test.dart' show AccountApi;
 import 'layout_test.dart' show TestApi;
-import 'evidence_specification_test.dart' show shell, specification;
+import 'evidence_specification_test.dart' show shell, specification, chooseSupply;
 
 class CreationApi extends TestApi {
   Map<String, dynamic>? created, detail;
@@ -139,12 +139,7 @@ void main() {
             await tester.ensureVisible(field);
             await tester.enterText(field, entry.value);
           }
-          final supply = find.byKey(const ValueKey('session-supply'));
-          await tester.ensureVisible(supply);
-          await tester.tap(supply);
-          await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('supply-option-3.3')).hitTestable());
-          await tester.pumpAndSettle();
+          await chooseSupply(tester, '3.3');
           tester.view.viewInsets = FakeViewPadding(bottom: layout.keyboard);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);

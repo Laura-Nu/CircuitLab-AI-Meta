@@ -23,6 +23,26 @@ Widget shell(String language, Widget home) => MaterialApp(
   home: home,
 );
 
+Future<void> chooseSupply(WidgetTester tester, String mode) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pumpAndSettle();
+  final field = find.byKey(const ValueKey('session-supply'));
+  final toggle = find.descendant(of: field, matching: find.byIcon(Icons.arrow_drop_down));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  expect(toggle.hitTestable(), findsOneWidget);
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
+  final option = find.descendant(
+    of: find.byKey(ValueKey('supply-option-$mode')),
+    matching: find.byType(Text),
+  ).hitTestable();
+  expect(option, findsOneWidget);
+  await tester.tap(option);
+  await tester.pumpAndSettle();
+  expect(tester.state<FormFieldState<String>>(field).value, mode);
+}
+
 Map<String, dynamic> specification(int count) => {
   'connections': ['Supply to input', 'Output to common ground'],
   'functional_description': 'Output remains inside its declared range.',

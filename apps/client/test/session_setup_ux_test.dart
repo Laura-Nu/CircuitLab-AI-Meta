@@ -6,17 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:circuitlab_client/main.dart';
 import 'package:circuitlab_client/features/specification_dialog.dart';
 import 'package:circuitlab_client/l10n/app_strings.dart';
-import 'evidence_specification_test.dart' show shell;
+import 'evidence_specification_test.dart' show shell, chooseSupply;
 import 'form_responsiveness_test.dart' show CreationApi;
-
-Future<void> chooseSupply(WidgetTester tester, String mode) async {
-  final selector = find.byKey(const ValueKey('session-supply'));
-  await tester.ensureVisible(selector);
-  await tester.tap(selector);
-  await tester.pumpAndSettle();
-  await tester.tap(find.byKey(ValueKey('supply-option-$mode')).hitTestable());
-  await tester.pumpAndSettle();
-}
 
 void main() {
   setUpAll(() async {
